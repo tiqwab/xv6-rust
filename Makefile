@@ -8,7 +8,7 @@ ifeq ($(V),0)
 override V = @
 endif
 
-.PHONY: clean image all
+.PHONY: clean image kernel all
 
 CC := gcc -pipe
 LD := ld
@@ -55,10 +55,7 @@ include boot/module.mk
 
 default: all
 
-image: $(OBJDIR)/boot/boot
-
-all:
-	cargo xbuild --target i686-xv6rust.json
+all: image kernel
 
 .gdbinit: .gdbinit.tmpl
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
@@ -72,6 +69,12 @@ qemu: $(IMAGES)
 
 qemu-gdb: $(IMAGES) .gdbinit
 	$(QEMU) $(QEMUOPTS) -S
+
+image: $(OBJDIR)/boot/boot kernel
+	dd conv=notrunc if=target/i686-xv6rust/debug/xv6-rust of=$(OBJDIR)/boot/boot obs=512 seek=1
+
+kernel:
+	cargo xbuild --target i686-xv6rust.json
 
 clean:
 	rm -rf $(OBJDIR)
