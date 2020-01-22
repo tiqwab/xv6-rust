@@ -48,7 +48,6 @@ GDBPORT	:= 12345
 QEMUOPTS := $(QEMUOPTS)
 QEMUOPTS += -drive file=$(OBJDIR)/boot/boot,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT)
 QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
-IMAGES := $(OBJDIR)/boot/boot
 
 
 include boot/module.mk
@@ -64,10 +63,10 @@ gdb:
 	$(GDB) -n -x .gdbinit
 
 # qemu: $(IMAGES) pre-qemu
-qemu: $(IMAGES)
+qemu: image
 	$(QEMU) $(QEMUOPTS)
 
-qemu-gdb: $(IMAGES) .gdbinit
+qemu-gdb: image .gdbinit
 	$(QEMU) $(QEMUOPTS) -S
 
 image: $(OBJDIR)/boot/boot kernel
