@@ -8,7 +8,7 @@ ifeq ($(V),0)
 override V = @
 endif
 
-.PHONY: clean image kernel all
+.PHONY: clean image kernel all test
 
 CC := gcc -pipe
 LD := ld
@@ -46,7 +46,7 @@ LDFLAGS := -m elf_i386
 GDBPORT	:= 12345
 
 QEMUOPTS := $(QEMUOPTS)
-QEMUOPTS += -drive file=$(OBJDIR)/boot/boot,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT)
+QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT)
 QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 
 
@@ -69,8 +69,16 @@ qemu: image
 qemu-gdb: image .gdbinit
 	$(QEMU) $(QEMUOPTS) -S
 
+test: test-image
+	$(QEMU) $(QEMUOPTS)
+
 image: $(OBJDIR)/boot/boot kernel
-	dd conv=notrunc if=target/i686-xv6rust/debug/xv6-rust of=$(OBJDIR)/boot/boot obs=512 seek=1
+	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
+	$(DD) conv=notrunc if=target/i686-xv6rust/debug/xv6-rust of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
+
+test-image: $(OBJDIR)/boot/boot kernel
+	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
+	dd conv=notrunc if=target/i686-xv6rust/debug/test of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
 kernel:
 	cargo xbuild --target i686-xv6rust.json
