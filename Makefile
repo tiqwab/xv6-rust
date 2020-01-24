@@ -8,7 +8,7 @@ ifeq ($(V),0)
 override V = @
 endif
 
-.PHONY: clean image kernel all test
+.PHONY: clean image kernel kernel-asm all test
 
 CC := gcc -pipe
 LD := ld
@@ -38,6 +38,8 @@ CFLAGS += -fno-tree-ch
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
 KERN_CFLAGS := $(CFLAGS) -gstabs
+KERN_BINARY := target/i686-xv6rust/debug/xv6-rust
+KERN_TEST_BINARY := target/i686-xv6rust/debug/test
 
 # Common linker flags
 LDFLAGS := -m elf_i386
@@ -74,14 +76,17 @@ test: test-image
 
 image: $(OBJDIR)/boot/boot kernel
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
-	$(DD) conv=notrunc if=target/i686-xv6rust/debug/xv6-rust of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
+	$(DD) conv=notrunc if=$(KERN_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
 test-image: $(OBJDIR)/boot/boot kernel
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
-	dd conv=notrunc if=target/i686-xv6rust/debug/test of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
+	dd conv=notrunc if=$(KERN_TEST_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
 kernel:
+	@mkdir -p $(OBJDIR)
 	cargo xbuild --target i686-xv6rust.json
+	$(OBJDUMP) -S $(KERN_BINARY) > $(OBJDIR)/xv6-rust.asm
+	$(OBJDUMP) -S $(KERN_TEST_BINARY) > $(OBJDIR)/xv6-rust-test.asm
 
 clean:
 	rm -rf $(OBJDIR)
