@@ -1,11 +1,10 @@
 use crate::volatile::Volatile;
 use core::fmt;
-use core::fmt::Error;
-use core::fmt::Write;
+use core::fmt::{Error, Write};
 
 // TODO: Make it to be thread-safe
 // ref. https://os.phil-opp.com/vga-text-mode/#spinlocks
-pub static mut WRITER: Option<Writer> = None;
+static mut WRITER: Option<Writer> = None;
 
 pub fn init_writer(buf: &'static mut Buffer) {
     unsafe {
@@ -15,19 +14,6 @@ pub fn init_writer(buf: &'static mut Buffer) {
             buffer: buf,
         });
     }
-}
-
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {
-        $crate::vga_buffer::_print(format_args!($($arg)*))
-    }
-}
-
-#[macro_export]
-macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
 #[doc(hidden)]
