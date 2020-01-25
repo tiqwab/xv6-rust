@@ -17,9 +17,11 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
+const KERN_BASE: u32 = 0xf0000000;
+
 #[no_mangle]
 pub fn lib_main() {
-    let vga_buffer = unsafe { &mut *(0xb8000 as *mut Buffer) };
+    let vga_buffer = unsafe { &mut *((0xb8000 + KERN_BASE) as *mut Buffer) };
     vga_buffer::init_writer(vga_buffer);
 
     serial::init_serial();
