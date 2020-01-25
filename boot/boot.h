@@ -1,6 +1,8 @@
 #ifndef _XV6RUST_BOOT_H
 #define _XV6RUST_BOOT_H
 
+// TODO: Should it be merged with header files in inc?
+
 /*
  * from inc/types.h in jos
  */
