@@ -84,9 +84,11 @@ test-image: $(OBJDIR)/boot/boot kernel
 
 kernel:
 	@mkdir -p $(OBJDIR)
-	cargo xbuild --target i686-xv6rust.json
+	# '--compress-debug-sections' is temporary fix for 'contains a compressed section, but zlib is not available'
+	CFLAGS="-Wa,--compress-debug-sections=none -Wl,--compress-debug-sections=none" cargo xbuild --target i686-xv6rust.json --verbose
 	$(OBJDUMP) -S $(KERN_BINARY) > $(OBJDIR)/xv6-rust.asm
 	$(OBJDUMP) -S $(KERN_TEST_BINARY) > $(OBJDIR)/xv6-rust-test.asm
 
 clean:
 	rm -rf $(OBJDIR)
+	cargo clean
