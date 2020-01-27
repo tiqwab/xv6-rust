@@ -10,9 +10,9 @@ extern "C" {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct VirtualAddr(u32);
+struct VirtAddr(u32);
 
-impl VirtualAddr {
+impl VirtAddr {
     /// VirtualAddr in kernel can be converted into PhysAddr.
     fn to_pa(&self) -> PhysAddr {
         if self.0 < KERN_BASE {
@@ -25,19 +25,19 @@ impl VirtualAddr {
     }
 }
 
-impl Add<u32> for VirtualAddr {
-    type Output = VirtualAddr;
+impl Add<u32> for VirtAddr {
+    type Output = VirtAddr;
 
     fn add(self, rhs: u32) -> Self::Output {
-        VirtualAddr(self.0 + rhs)
+        VirtAddr(self.0 + rhs)
     }
 }
 
-impl Sub<u32> for VirtualAddr {
-    type Output = VirtualAddr;
+impl Sub<u32> for VirtAddr {
+    type Output = VirtAddr;
 
     fn sub(self, rhs: u32) -> Self::Output {
-        VirtualAddr(self.0 - rhs)
+        VirtAddr(self.0 - rhs)
     }
 }
 
@@ -45,12 +45,12 @@ impl Sub<u32> for VirtualAddr {
 struct PhysAddr(u32);
 
 struct BootAllocator {
-    bss_end: VirtualAddr,
-    next_free: Option<VirtualAddr>,
+    bss_end: VirtAddr,
+    next_free: Option<VirtAddr>,
 }
 
 impl BootAllocator {
-    pub fn new(bss_end: VirtualAddr) -> BootAllocator {
+    pub fn new(bss_end: VirtAddr) -> BootAllocator {
         BootAllocator {
             bss_end: bss_end,
             next_free: None,
@@ -69,7 +69,7 @@ impl BootAllocator {
     /// If we're out of memory, boot_alloc should panic.
     /// This function may ONLY be used during initialization,
     /// before the page_free_list list has been set up.
-    fn alloc(&mut self, n: u32) -> VirtualAddr {
+    fn alloc(&mut self, n: u32) -> VirtAddr {
         match self.next_free.take() {
             None => {
                 let next = round_up_va(self.bss_end, PGSIZE);
@@ -92,7 +92,7 @@ struct PageDirectory {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-struct PDX(VirtualAddr);
+struct PDX(VirtAddr);
 
 impl Index<usize> for PageDirectory {
     type Output = PDE;
@@ -139,8 +139,8 @@ fn round_up_u32(x: u32, base: u32) -> u32 {
     ((x - 1 + base) / base) * base
 }
 
-fn round_up_va(x: VirtualAddr, base: u32) -> VirtualAddr {
-    VirtualAddr(round_up_u32(x.0, base))
+fn round_up_va(x: VirtAddr, base: u32) -> VirtAddr {
+    VirtAddr(round_up_u32(x.0, base))
 }
 
 fn nvram_read(reg: u8) -> u16 {
@@ -186,7 +186,7 @@ pub fn mem_init() {
     let (npages, npages_basemem) = i386_detect_memory();
 
     // create initial page directory.
-    let bss_end = VirtualAddr(unsafe { &end as *const _ as u32 });
+    let bss_end = VirtAddr(unsafe { &end as *const _ as u32 });
     let mut boot_allocator = BootAllocator::new(bss_end);
     let kern_pgdir_va = boot_allocator.alloc(PGSIZE);
     println!("kern_pgdir: 0x{:x}", kern_pgdir_va.0);
@@ -196,7 +196,7 @@ pub fn mem_init() {
     // a virtual page table at virtual address UVPT.
     // Permissions: kernel R, user R
     let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
-    let uvpt = VirtualAddr(UVPT);
+    let uvpt = VirtAddr(UVPT);
     let entry = PDE::new(kern_pgdir_va.to_pa(), PTE_P | PTE_U);
     let index = PDX(uvpt);
     kern_pgdir[index] = entry;
