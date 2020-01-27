@@ -2,12 +2,18 @@
 #![feature(const_fn)]
 #![feature(asm)]
 
+#[macro_use]
+
 pub mod console;
+pub mod constants;
+mod kclock;
+mod pmap;
 pub mod serial;
 pub mod vga_buffer;
 pub mod volatile;
 mod x86;
 
+use constants::*;
 use core::panic::PanicInfo;
 use vga_buffer::Buffer;
 
@@ -17,14 +23,14 @@ fn panic(info: &PanicInfo) -> ! {
     loop {}
 }
 
-const KERN_BASE: u32 = 0xf0000000;
-
 #[no_mangle]
 pub fn lib_main() {
     let vga_buffer = unsafe { &mut *((0xb8000 + KERN_BASE) as *mut Buffer) };
     vga_buffer::init_writer(vga_buffer);
 
     serial::init_serial();
+
+    pmap::mem_init();
 
     print!("H");
     println!("ello");
