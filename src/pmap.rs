@@ -3,7 +3,7 @@ use core::ops::{Add, Index, IndexMut, Sub};
 use crate::constants::*;
 use crate::kclock;
 use core::mem;
-use core::ptr::null_mut;
+use core::ptr::{null, null_mut};
 
 extern "C" {
     static end: u32;
@@ -43,6 +43,13 @@ impl Sub<u32> for VirtAddr {
 
 #[derive(Debug, Clone, Copy)]
 struct PhysAddr(u32);
+
+impl PhysAddr {
+    fn to_va(&self) -> VirtAddr {
+        assert!(self.0 <= 0xf0000000, "PhysAddr(0x{:x}) is too high", self.0);
+        VirtAddr(self.0 | KERN_BASE)
+    }
+}
 
 struct BootAllocator {
     bss_end: VirtAddr,
@@ -94,9 +101,59 @@ struct PageDirectory {
 #[repr(C)]
 struct PDX(VirtAddr);
 
+impl PageDirectory {
+    fn get(&self, pdx: PDX) -> Option<PDE> {
+        if self[pdx].exists() {
+            Some(self[pdx])
+        } else {
+            None
+        }
+    }
+
+    /// Given 'pgdir', a pointer to a page directory, pgdir_walk returns
+    /// a pointer to the page table entry (PTE) for linear address 'va'.
+    /// This requires walking the two-level page table structure.
+    ///
+    /// The relevant page table page might not exist yet.
+    /// If this is true, and create == false, then pgdir_walk returns NULL.
+    /// Otherwise, pgdir_walk allocates a new page table page with page_alloc.
+    ///    - If the allocation fails, pgdir_walk returns NULL.
+    ///    - Otherwise, the new page's reference count is incremented,
+    ///	the page is cleared,
+    ///	and pgdir_walk returns a pointer into the new page table page.
+    fn walk(
+        &mut self,
+        va: VirtAddr,
+        should_create: bool,
+        allocator: &mut PageAllocator,
+    ) -> Option<PTE> {
+        let pdx = PDX(va);
+        let pde_opt = self.get(pdx).or_else(|| {
+            if !should_create {
+                None
+            } else {
+                let pp_opt = unsafe { allocator.alloc(AllocFlag::AllocZero).as_mut() };
+                pp_opt.map(|pp| {
+                    pp.pp_ref += 1;
+                    let pa = allocator.to_pa(pp);
+                    let pde = PDE::new(pa, PTE_U | PTE_P | PTE_W);
+                    self[pdx] = pde;
+                    pde
+                })
+            }
+        });
+
+        pde_opt.map(|pde| {
+            let pt = pde.table();
+            println!("{:?}", pt as *mut PageTable);
+            let ptx = PTX(va);
+            pt[ptx]
+        })
+    }
+}
+
 impl Index<usize> for PageDirectory {
     type Output = PDE;
-
     fn index(&self, index: usize) -> &Self::Output {
         &self.entries[index]
     }
@@ -110,7 +167,6 @@ impl IndexMut<usize> for PageDirectory {
 
 impl Index<PDX> for PageDirectory {
     type Output = PDE;
-
     fn index(&self, index: PDX) -> &Self::Output {
         let addr = (index.0).0 as usize;
         let addr = (addr >> 22) & 0x3ff;
@@ -126,12 +182,71 @@ impl IndexMut<PDX> for PageDirectory {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 #[repr(C)]
 struct PDE(u32);
 
 impl PDE {
     fn new(pa: PhysAddr, attr: u32) -> PDE {
         PDE(pa.0 | attr)
+    }
+
+    fn exists(&self) -> bool {
+        self.0 & PTE_P == 0x1
+    }
+    fn table(&self) -> &mut PageTable {
+        let va = PhysAddr(self.0 & 0xfffff000).to_va();
+        unsafe { &mut *(va.0 as *mut PageTable) }
+    }
+}
+
+#[repr(align(4096))]
+#[repr(C)]
+struct PageTable {
+    entries: [PTE; NPTENTRIES],
+}
+
+impl Index<usize> for PageTable {
+    type Output = PTE;
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.entries[index]
+    }
+}
+
+impl IndexMut<usize> for PageTable {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.entries[index]
+    }
+}
+
+impl Index<PTX> for PageTable {
+    type Output = PTE;
+    fn index(&self, index: PTX) -> &Self::Output {
+        let addr = (index.0).0 as usize;
+        let addr = (addr >> 12) & 0x3ff;
+        &self[addr]
+    }
+}
+
+impl IndexMut<PTX> for PageTable {
+    fn index_mut(&mut self, index: PTX) -> &mut Self::Output {
+        let addr = (index.0).0 as usize;
+        let addr = (addr >> 12) & 0x3ff;
+        &mut self[addr]
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+struct PTX(VirtAddr);
+
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+struct PTE(u32);
+
+impl PTE {
+    fn new(pa: PhysAddr, attr: u32) -> PTE {
+        PTE(pa.0 | attr)
     }
 }
 
@@ -212,19 +327,33 @@ pub fn mem_init() {
     // to initialize all fields of each struct PageInfo to 0.
     let page_info_size = mem::size_of::<PageInfo>();
     let pages = boot_allocator.alloc(npages * page_info_size as u32).0 as *mut PageInfo;
-    let mut allocator = PageAllocator {
-        page_free_list: null_mut(),
-        pages: pages,
-    };
-    // memset(pages, 0, npages * sizeof (struct PageInfo));
-    println!("pages: 0x{:?}", pages);
 
     // Now that we've allocated the initial kernel data structures, we set
     // up the list of free physical pages. Once we've done so, all further
     // memory management will go through the page_* functions. In
-    // particular, we can now map memory using boot_map_region
-    // or page_insert
-    allocator.init(&mut boot_allocator, npages, npages_basemem);
+    // particular, we can now map memory using boot_map_region or page_insert
+    let mut allocator = PageAllocator::new(pages, &mut boot_allocator, npages, npages_basemem);
+    // memset(pages, 0, npages * sizeof (struct PageInfo));
+    println!("pages: 0x{:?}", pages);
+
+    println!("page_free_list: 0x{:?}", allocator.page_free_list);
+    let p1 = allocator.alloc(AllocFlag::None);
+    let p2 = allocator.alloc(AllocFlag::AllocZero);
+    println!("p1: 0x{:?}, p2: 0x{:?}", p1, p2);
+    allocator.free(p2);
+    allocator.free(p1);
+    println!("page_free_list: 0x{:?}", allocator.page_free_list);
+    let p1 = allocator.alloc(AllocFlag::None);
+    let p2 = allocator.alloc(AllocFlag::AllocZero);
+    println!("p1: 0x{:?}, p2: 0x{:?}", p1, p2);
+    allocator.free(p2);
+    allocator.free(p1);
+    println!("page_free_list: 0x{:?}", allocator.page_free_list);
+
+    let x = kern_pgdir.walk(VirtAddr(0x00001000), false, &mut allocator);
+    println!("pte: {:?}", x);
+    let x = kern_pgdir.walk(VirtAddr(0x00001000), true, &mut allocator);
+    println!("pte: {:?}", x);
 }
 
 // --------------------------------------------------------------
@@ -239,28 +368,120 @@ struct PageInfo {
     pp_ref: u16,
 }
 
+// FIXME: how to represent it in rust way
 struct PageAllocator {
     page_free_list: *mut PageInfo,
     pages: *mut PageInfo,
 }
 
+#[allow(dead_code)]
+#[repr(u8)]
+enum AllocFlag {
+    None,
+    AllocZero,
+}
+
 impl PageAllocator {
+    fn new(
+        pages: *mut PageInfo,
+        ba: &mut BootAllocator,
+        npages: u32,
+        npages_basemem: u32,
+    ) -> PageAllocator {
+        let mut allocator = PageAllocator {
+            page_free_list: null_mut(),
+            pages: pages,
+        };
+        allocator.init(ba, npages, npages_basemem);
+        allocator
+    }
+
     /// Initialize page structure and memory free list.
     /// After this is done, NEVER use boot_alloc again.  ONLY use the page
     /// allocator functions below to allocate and deallocate physical
     /// memory via the page_free_list.
     fn init(&mut self, ba: &mut BootAllocator, npages: u32, npages_basemem: u32) {
         let first_free_page = ba.alloc(0).to_pa().0 / PGSIZE;
-        let mut prev: *mut PageInfo = null_mut();
         for i in 0..npages {
+            // skip the first 4 KB in case that we need real-mode IDT and BIOS structures.
+            if i == 0 {
+                continue;
+            }
+            // already used in kernel
             if i >= npages_basemem && i < first_free_page {
-                println!("{}", i);
                 continue;
             }
             let page = unsafe { &mut *(self.pages.add(i as usize)) };
             page.pp_ref = 0;
-            page.pp_link = prev;
+            page.pp_link = self.page_free_list;
             self.page_free_list = page as *mut PageInfo;
+        }
+
+        // FIXME later
+        // It is necessary to reverse the order because
+        // entry_pgdir doesn't map the higher addresses.
+        unsafe {
+            let mut prev = self.page_free_list;
+            let mut cur = (*prev).pp_link;
+            (*prev).pp_link = null_mut();
+            while cur != null_mut() {
+                let tmp = (*cur).pp_link;
+                (*cur).pp_link = prev;
+                prev = cur;
+                cur = tmp;
+            }
+            self.page_free_list = prev;
+        }
+    }
+
+    /// Allocates a physical page.  If (alloc_flags & ALLOC_ZERO), fills the entire
+    /// returned physical page with '\0' bytes.  Does NOT increment the reference
+    /// count of the page - the caller must do these if necessary (either explicitly
+    /// or via page_insert).
+    ///
+    /// Be sure to set the pp_link field of the allocated page to NULL so
+    /// page_free can check for double-free bugs.
+    ///
+    /// Returns NULL if out of free memory.
+    fn alloc(&mut self, flag: AllocFlag) -> *mut PageInfo {
+        unsafe {
+            let pp = self.page_free_list;
+            if pp == null_mut() {
+                return null_mut();
+            }
+
+            self.page_free_list = (*pp).pp_link;
+
+            match flag {
+                AllocFlag::AllocZero => {}
+                _ => {}
+            }
+            // if (alloc_flags & ALLOC_ZERO) {
+            //     memset(page2kva(pp), 0, PGSIZE);
+            // }
+
+            (*pp).pp_ref = 0;
+            (*pp).pp_link = null_mut();
+            pp
+        }
+    }
+
+    fn to_pa(&self, pp: *const PageInfo) -> PhysAddr {
+        unsafe {
+            let offset = pp.offset_from(self.pages) as u32;
+            PhysAddr(offset << PGSHIFT)
+        }
+    }
+
+    /// Return a page to the free list.
+    /// (This function should only be called when pp->pp_ref reaches 0.)
+    fn free(&mut self, pp: *mut PageInfo) {
+        unsafe {
+            assert_ne!(pp, null_mut(), "pp should not be null");
+            assert_eq!((*pp).pp_ref, 0, "pp_ref should be zero");
+            assert_eq!((*pp).pp_link, null_mut(), "pp_link should be null");
+            (*pp).pp_link = self.page_free_list;
+            self.page_free_list = pp;
         }
     }
 }

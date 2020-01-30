@@ -2,7 +2,9 @@
 
 pub(crate) const KERN_BASE: u32 = 0xf0000000;
 pub(crate) const PGSIZE: u32 = 4096;
+pub(crate) const PGSHIFT: u32 = 12;
 pub(crate) const PTE_U: u32 = 0x4;
+pub(crate) const PTE_W: u32 = 0x2;
 pub(crate) const PTE_P: u32 = 0x1;
 pub(crate) const NPDENTRIES: usize = 1024;
 pub(crate) const NPTENTRIES: usize = 1024;

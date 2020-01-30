@@ -1,6 +1,8 @@
 #![no_std]
 #![feature(const_fn)]
 #![feature(asm)]
+#![feature(bool_to_option)]
+#![feature(ptr_offset_from)]
 
 #[macro_use]
 
