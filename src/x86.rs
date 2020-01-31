@@ -1,3 +1,5 @@
+use crate::pmap::PhysAddr;
+
 #[inline]
 pub(crate) fn inb(port: u16) -> u8 {
     unsafe {
@@ -12,4 +14,21 @@ pub(crate) fn outb(port: u16, value: u8) {
     unsafe {
         asm!("outb $1, $0" :: "N{dx}"(port), "{al}"(value) :: "volatile");
     }
+}
+
+#[inline]
+pub(crate) fn lcr3(addr: PhysAddr) {
+    unsafe { asm!("mov $0, %cr3" :: "r"(addr.0) : "memory" : "volatile") }
+}
+
+#[inline]
+pub(crate) fn rcr0() -> u32 {
+    let value: u32;
+    unsafe { asm!("mov %cr0, $0" : "=r"(value) ::: "volatile") }
+    value
+}
+
+#[inline]
+pub(crate) fn lcr0(value: u32) {
+    unsafe { asm!("mov $0, %cr0" :: "r"(value) : "memory" : "volatile") }
 }

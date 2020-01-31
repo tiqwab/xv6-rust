@@ -1,9 +1,10 @@
+use core::mem;
 use core::ops::{Add, Index, IndexMut, Sub};
+use core::ptr::{null, null_mut};
 
 use crate::constants::*;
 use crate::kclock;
-use core::mem;
-use core::ptr::{null, null_mut};
+use crate::x86;
 
 extern "C" {
     static end: u32;
@@ -11,7 +12,7 @@ extern "C" {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct VirtAddr(u32);
+pub(crate) struct VirtAddr(pub(crate) u32);
 
 impl VirtAddr {
     /// VirtualAddr in kernel can be converted into PhysAddr.
@@ -63,7 +64,7 @@ impl Sub<usize> for VirtAddr {
 }
 
 #[derive(Debug, Clone, Copy)]
-struct PhysAddr(u32);
+pub(crate) struct PhysAddr(pub(crate) u32);
 
 impl PhysAddr {
     fn to_va(&self) -> VirtAddr {
@@ -498,6 +499,19 @@ pub fn mem_init() {
         PTE_P | PTE_W,
         &mut allocator,
     );
+
+    // Switch from the minimal entry page directory to the full kern_pgdir
+    // page table we just created.	Our instruction pointer should be
+    // somewhere between KERNBASE and KERNBASE+4MB right now, which is
+    // mapped the same way by both page tables.
+    x86::lcr3(VirtAddr(kern_pgdir as *const PageDirectory as u32).to_pa());
+
+    // entry.S set the really important flags in cr0 (including enabling
+    // paging).  Here we configure the rest of the flags that we care about.
+    let mut cr0 = x86::rcr0();
+    cr0 |= CR0_PE | CR0_PG | CR0_AM | CR0_WP | CR0_NE | CR0_MP;
+    cr0 &= !(CR0_TS | CR0_EM);
+    x86::lcr0(cr0);
 }
 
 // --------------------------------------------------------------

@@ -18,3 +18,15 @@ pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
 pub(crate) const ULIM: u32 = MMIOBASE;
 pub(crate) const UVPT: u32 = ULIM - (PTSIZE as u32);
 pub(crate) const UPAGES: u32 = UVPT - (PTSIZE as u32);
+
+pub(crate) const CR0_PE: u32 = 0x0000001; // Protection Enable
+pub(crate) const CR0_MP: u32 = 0x0000002; // Monitor coProcessor
+pub(crate) const CR0_EM: u32 = 0x0000004; // Emulation
+pub(crate) const CR0_TS: u32 = 0x0000008; // Task Switched
+pub(crate) const CR0_ET: u32 = 0x0000010; // Extension Type
+pub(crate) const CR0_NE: u32 = 0x0000020; // Numeric Error
+pub(crate) const CR0_WP: u32 = 0x0010000; // Write Protect
+pub(crate) const CR0_AM: u32 = 0x0040000; // Alignment Mask
+pub(crate) const CR0_NW: u32 = 0x2000000; // Not Write through
+pub(crate) const CR0_CD: u32 = 0x4000000; // Cache Disable
+pub(crate) const CR0_PG: u32 = 0x8000000; // Paging
