@@ -15,3 +15,4 @@ pub(crate) const MMIOLIM: u32 = KSTACKTOP - (PTSIZE as u32);
 pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
 pub(crate) const ULIM: u32 = MMIOBASE;
 pub(crate) const UVPT: u32 = ULIM - (PTSIZE as u32);
+pub(crate) const UPAGES: u32 = UVPT - (PTSIZE as u32);

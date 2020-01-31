@@ -23,6 +23,10 @@ impl VirtAddr {
         }
         PhysAddr(self.0 - KERN_BASE)
     }
+
+    fn is_aligned(&self) -> bool {
+        self.0 % PGSIZE == 0
+    }
 }
 
 impl Add<u32> for VirtAddr {
@@ -30,6 +34,14 @@ impl Add<u32> for VirtAddr {
 
     fn add(self, rhs: u32) -> Self::Output {
         VirtAddr(self.0 + rhs)
+    }
+}
+
+impl Add<usize> for VirtAddr {
+    type Output = VirtAddr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        VirtAddr(self.0 + (rhs as u32))
     }
 }
 
@@ -41,6 +53,14 @@ impl Sub<u32> for VirtAddr {
     }
 }
 
+impl Sub<usize> for VirtAddr {
+    type Output = VirtAddr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        VirtAddr(self.0 - (rhs as u32))
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 struct PhysAddr(u32);
 
@@ -48,6 +68,42 @@ impl PhysAddr {
     fn to_va(&self) -> VirtAddr {
         assert!(self.0 <= 0xf0000000, "PhysAddr(0x{:x}) is too high", self.0);
         VirtAddr(self.0 | KERN_BASE)
+    }
+
+    fn is_aligned(&self) -> bool {
+        self.0 % PGSIZE == 0
+    }
+}
+
+impl Add<u32> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn add(self, rhs: u32) -> Self::Output {
+        PhysAddr(self.0 + rhs)
+    }
+}
+
+impl Add<usize> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        PhysAddr(self.0 + (rhs as u32))
+    }
+}
+
+impl Sub<u32> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn sub(self, rhs: u32) -> Self::Output {
+        PhysAddr(self.0 - rhs)
+    }
+}
+
+impl Sub<usize> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        PhysAddr(self.0 - (rhs as u32))
     }
 }
 
@@ -102,9 +158,9 @@ struct PageDirectory {
 struct PDX(VirtAddr);
 
 impl PageDirectory {
-    fn get(&self, pdx: PDX) -> Option<PDE> {
+    fn get(&mut self, pdx: PDX) -> Option<&mut PDE> {
         if self[pdx].exists() {
-            Some(self[pdx])
+            Some(&mut self[pdx])
         } else {
             None
         }
@@ -126,29 +182,53 @@ impl PageDirectory {
         va: VirtAddr,
         should_create: bool,
         allocator: &mut PageAllocator,
-    ) -> Option<PTE> {
+    ) -> Option<&mut PTE> {
         let pdx = PDX(va);
-        let pde_opt = self.get(pdx).or_else(|| {
+        let pde = &mut self[pdx];
+        if !pde.exists() {
             if !should_create {
-                None
-            } else {
-                let pp_opt = unsafe { allocator.alloc(AllocFlag::AllocZero).as_mut() };
-                pp_opt.map(|pp| {
-                    pp.pp_ref += 1;
-                    let pa = allocator.to_pa(pp);
-                    let pde = PDE::new(pa, PTE_U | PTE_P | PTE_W);
-                    self[pdx] = pde;
-                    pde
-                })
+                return None;
             }
-        });
+            let pp_opt = unsafe { allocator.alloc(AllocFlag::AllocZero).as_mut() };
+            let pp = pp_opt.unwrap();
+            pp.pp_ref += 1;
+            let pa = allocator.to_pa(pp);
+            pde.set(pa, PTE_U | PTE_P | PTE_W);
+        }
 
-        pde_opt.map(|pde| {
-            let pt = pde.table();
-            println!("{:?}", pt as *mut PageTable);
-            let ptx = PTX(va);
-            pt[ptx]
-        })
+        let pt = pde.table();
+        println!("walk: pt for va({:x}): {:?}", va.0, pt as *mut PageTable);
+        let ptx = PTX(va);
+        Some(&mut pt[ptx])
+    }
+
+    /// Map [va, va+size) of virtual address space to physical [pa, pa+size)
+    /// in the page table rooted at pgdir.  Size is a multiple of PGSIZE, and
+    /// va and pa are both page-aligned.
+    /// Use permission bits perm|PTE_P for the entries.
+    fn boot_map_region(
+        &mut self,
+        start_va: VirtAddr,
+        size: usize,
+        start_pa: PhysAddr,
+        perm: u32,
+        allocator: &mut PageAllocator,
+    ) {
+        assert!(start_va.is_aligned(), "start_va is not page aligned.");
+        assert!(start_pa.is_aligned(), "start_pa is not page aligned.");
+        assert_eq!(
+            size % (PGSIZE as usize),
+            0,
+            "size should be multiple of PGSIZE"
+        );
+
+        for i in 0..(size / (PGSIZE as usize)) {
+            let va = start_va + i * (PGSIZE as usize);
+            let pa = start_pa + i * (PGSIZE as usize);
+            let pte = self.walk(va, true, allocator).unwrap();
+            pte.set(pa, perm | PTE_P);
+            println!("0x{:x}", pte.0);
+        }
     }
 }
 
@@ -182,18 +262,25 @@ impl IndexMut<PDX> for PageDirectory {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 #[repr(C)]
 struct PDE(u32);
 
 impl PDE {
     fn new(pa: PhysAddr, attr: u32) -> PDE {
-        PDE(pa.0 | attr)
+        let mut pde = PDE(0);
+        pde.set(pa, attr);
+        pde
     }
 
     fn exists(&self) -> bool {
         self.0 & PTE_P == 0x1
     }
+
+    fn set(&mut self, pa: PhysAddr, attr: u32) {
+        self.0 = pa.0 | attr;
+    }
+
     fn table(&self) -> &mut PageTable {
         let va = PhysAddr(self.0 & 0xfffff000).to_va();
         unsafe { &mut *(va.0 as *mut PageTable) }
@@ -240,13 +327,23 @@ impl IndexMut<PTX> for PageTable {
 #[repr(C)]
 struct PTX(VirtAddr);
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 #[repr(C)]
 struct PTE(u32);
 
 impl PTE {
     fn new(pa: PhysAddr, attr: u32) -> PTE {
-        PTE(pa.0 | attr)
+        let mut pte = PTE(0);
+        pte.set(pa, attr);
+        pte
+    }
+
+    fn exists(&self) -> bool {
+        self.0 & PTE_P == 0x1
+    }
+
+    fn set(&mut self, pa: PhysAddr, attr: u32) {
+        self.0 = pa.0 | attr;
     }
 }
 
@@ -354,6 +451,21 @@ pub fn mem_init() {
     println!("pte: {:?}", x);
     let x = kern_pgdir.walk(VirtAddr(0x00001000), true, &mut allocator);
     println!("pte: {:?}", x);
+
+    // Now we set up virtual memory
+
+    // Map 'pages' read-only by the user at linear address UPAGES
+    // Permissions:
+    //    - the new image at UPAGES -- kernel R, user R
+    //      (ie. perm = PTE_U | PTE_P)
+    //    - pages itself -- kernel RW, user NONE
+    kern_pgdir.boot_map_region(
+        VirtAddr(UPAGES),
+        round_up_u32(npages * (page_info_size as u32), PGSIZE) as usize,
+        VirtAddr(pages as u32).to_pa(),
+        PTE_U | PTE_P,
+        &mut allocator,
+    );
 }
 
 // --------------------------------------------------------------
