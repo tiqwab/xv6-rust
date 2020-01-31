@@ -7,6 +7,7 @@ use core::ptr::{null, null_mut};
 
 extern "C" {
     static end: u32;
+    static bootstack: u32;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -197,7 +198,7 @@ impl PageDirectory {
         }
 
         let pt = pde.table();
-        println!("walk: pt for va({:x}): {:?}", va.0, pt as *mut PageTable);
+        // println!("walk: pt for va({:x}): {:?}", va.0, pt as *mut PageTable);
         let ptx = PTX(va);
         Some(&mut pt[ptx])
     }
@@ -227,7 +228,7 @@ impl PageDirectory {
             let pa = start_pa + i * (PGSIZE as usize);
             let pte = self.walk(va, true, allocator).unwrap();
             pte.set(pa, perm | PTE_P);
-            println!("0x{:x}", pte.0);
+            // println!("0x{:x}", pte.0);
         }
     }
 }
@@ -464,6 +465,37 @@ pub fn mem_init() {
         round_up_u32(npages * (page_info_size as u32), PGSIZE) as usize,
         VirtAddr(pages as u32).to_pa(),
         PTE_U | PTE_P,
+        &mut allocator,
+    );
+
+    // Use the physical memory that 'bootstack' refers to as the kernel
+    // stack.  The kernel stack grows down from virtual address KSTACKTOP.
+    // We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
+    // to be the kernel stack, but break this into two pieces:
+    //     * [KSTACKTOP-KSTKSIZE, KSTACKTOP) -- backed by physical memory
+    //     * [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) -- not backed; so if
+    //       the kernel overflows its stack, it will fault rather than
+    //       overwrite memory.  Known as a "guard page".
+    //     Permissions: kernel RW, user NONE
+    kern_pgdir.boot_map_region(
+        VirtAddr(KSTACKTOP - KSTKSIZE),
+        KSTKSIZE as usize,
+        PhysAddr(unsafe { &bootstack as *const _ as u32 }),
+        PTE_P | PTE_W,
+        &mut allocator,
+    );
+
+    // Map all of physical memory at KERNBASE.
+    // Ie.  the VA range [KERNBASE, 2^32) should map to
+    //      the PA range [0, 2^32 - KERNBASE)
+    // We might not have 2^32 - KERNBASE bytes of physical memory, but
+    // we just set up the mapping anyway.
+    // Permissions: kernel RW, user NONE
+    kern_pgdir.boot_map_region(
+        VirtAddr(KERN_BASE),
+        ((0xffffffff) - KERN_BASE + 1) as usize,
+        PhysAddr(0),
+        PTE_P | PTE_W,
         &mut allocator,
     );
 }

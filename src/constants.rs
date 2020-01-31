@@ -11,6 +11,8 @@ pub(crate) const NPTENTRIES: usize = 1024;
 pub(crate) const PTSIZE: usize = NPTENTRIES * (PGSIZE as usize);
 
 pub(crate) const KSTACKTOP: u32 = KERN_BASE;
+pub(crate) const KSTKSIZE: u32 = (8 * PGSIZE);
+pub(crate) const KSTKGAP: u32 = (8 * PGSIZE);
 pub(crate) const MMIOLIM: u32 = KSTACKTOP - (PTSIZE as u32);
 pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
 pub(crate) const ULIM: u32 = MMIOBASE;
