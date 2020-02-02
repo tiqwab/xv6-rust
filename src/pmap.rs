@@ -239,35 +239,66 @@ impl PageDirectory {
     // Return None if there is no page mapped at va.
     fn lookup(&mut self, va: VirtAddr, allocator: &mut PageAllocator) -> Option<&mut PTE> {
         self.walk(va, false, allocator)
+            .and_then(|pte| if pte.exists() { Some(pte) } else { None })
     }
 
-    // Unmaps the physical page at virtual address 'va'.
-    // If there is no physical page at that address, silently does nothing.
-    //
-    // Details:
-    //   - The ref count on the physical page should decrement.
-    //   - The physical page should be freed if the refcount reaches 0.
-    //   - The pg table entry corresponding to 'va' should be set to 0.
-    //     (if such a PTE exists)
-    //   - The TLB must be invalidated if you remove an entry from
-    //     the page table.
+    /// Unmaps the physical page at virtual address 'va'.
+    /// If there is no physical page at that address, silently does nothing.
+    ///
+    /// Details:
+    ///   - The ref count on the physical page should decrement.
+    ///   - The physical page should be freed if the refcount reaches 0.
+    ///   - The pg table entry corresponding to 'va' should be set to 0.
+    ///     (if such a PTE exists)
+    ///   - The TLB must be invalidated if you remove an entry from
+    ///     the page table.
     fn remove(&mut self, va: VirtAddr, allocator: &mut PageAllocator) {
         match self.lookup(va, allocator) {
             None => (),
             Some(pte) => {
-                allocator.decref_pte(pte);
-                pte.clear();
-                self.tlb_invalidate(va);
+                PageDirectory::remove_pte(va, pte, allocator);
             }
         }
     }
 
-    /// Invalidate a TLB entry, but only if the page tables being
-    /// edited are the ones currently in use by the processor.
-    fn tlb_invalidate(&self, va: VirtAddr) {
-        // Flush the entry only if we're modifying the current address space.
-        // For now, there is only one address space, so always invalidate.
-        x86::invlpg(va);
+    fn remove_pte(va: VirtAddr, pte: &mut PTE, allocator: &mut PageAllocator) {
+        /// Invalidate a TLB entry, but only if the page tables being
+        /// edited are the ones currently in use by the processor.
+        fn tlb_invalidate(va: VirtAddr) {
+            // Flush the entry only if we're modifying the current address space.
+            // For now, there is only one address space, so always invalidate.
+            x86::invlpg(va);
+        }
+
+        allocator.decref_pte(pte);
+        pte.clear();
+        tlb_invalidate(va);
+    }
+
+    /// Map the physical page 'pp' at virtual address 'va'.
+    /// The permissions (the low 12 bits) of the page table entry
+    /// should be set to 'perm|PTE_P'.
+    ///
+    /// Requirements
+    ///   - If there is already a page mapped at 'va', it should be page_remove()d.
+    ///   - If necessary, on demand, a page table should be allocated and inserted
+    ///     into 'pgdir'.
+    ///   - pp->pp_ref should be incremented if the insertion succeeds.
+    ///   - The TLB must be invalidated if a page was formerly present at 'va'.
+    ///
+    /// RETURNS:
+    ///   0 on success
+    ///   -E_NO_MEM, if page table couldn't be allocated
+    fn insert(&mut self, pa: PhysAddr, va: VirtAddr, perm: u32, allocator: &mut PageAllocator) {
+        // TODO: should use Result
+        let old_pte = self.walk(va, true, allocator).unwrap();
+        // increment first to handle the corner case: the same PageInfo is re-inserted at the same virtual address
+        let new_pte = PTE::new(pa, perm | PTE_P);
+        allocator.incref_pte(&new_pte);
+        if old_pte.exists() {
+            PageDirectory::remove_pte(va, old_pte, allocator);
+        }
+        old_pte.set(new_pte.addr(), new_pte.attr());
     }
 }
 
@@ -379,6 +410,14 @@ impl PTE {
 
     fn exists(&self) -> bool {
         self.0 & PTE_P == 0x1
+    }
+
+    fn addr(&self) -> PhysAddr {
+        PhysAddr(self.0 & 0xfffff000)
+    }
+
+    fn attr(&self) -> u32 {
+        self.0 & 0x00000fff
     }
 
     fn set(&mut self, pa: PhysAddr, attr: u32) {
@@ -551,11 +590,22 @@ pub fn mem_init() {
         .unwrap();
     println!("pte: 0x{:x}", x.0);
 
-    // kern_pgdir.remove(VirtAddr(0xf0001000), &mut allocator);
-    // let x = kern_pgdir.lookup(VirtAddr(0xf0001000), &mut allocator);
-    // if x.is_some() {
-    //     panic!("should be none");
-    // }
+    // insert and remove test
+    let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
+    if x.is_some() {
+        panic!("should be none");
+    }
+    let x = allocator.alloc(AllocFlag::AllocZero).unwrap();
+    kern_pgdir.insert(x, VirtAddr(0x00000000), PTE_P | PTE_W, &mut allocator);
+    let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
+    if x.is_none() {
+        panic!("should be some");
+    }
+    kern_pgdir.remove(VirtAddr(0x00000000), &mut allocator);
+    let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
+    if x.is_some() {
+        panic!("should be none");
+    }
 }
 
 // --------------------------------------------------------------
