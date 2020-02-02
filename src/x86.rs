@@ -1,4 +1,4 @@
-use crate::pmap::PhysAddr;
+use crate::pmap::{PhysAddr, VirtAddr};
 
 #[inline]
 pub(crate) fn inb(port: u16) -> u8 {
@@ -31,4 +31,9 @@ pub(crate) fn rcr0() -> u32 {
 #[inline]
 pub(crate) fn lcr0(value: u32) {
     unsafe { asm!("mov $0, %cr0" :: "r"(value) : "memory" : "volatile") }
+}
+
+#[inline]
+pub(crate) fn invlpg(va: VirtAddr) {
+    unsafe { asm!("invlpg ($0)" :: "r"(va.0) : "memory" : "volatile") }
 }

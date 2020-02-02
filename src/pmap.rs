@@ -191,11 +191,9 @@ impl PageDirectory {
             if !should_create {
                 return None;
             }
-            let pp_opt = unsafe { allocator.alloc(AllocFlag::AllocZero).as_mut() };
-            let pp = pp_opt.unwrap();
-            pp.pp_ref += 1;
-            let pa = allocator.to_pa(pp);
+            let pa = allocator.alloc(AllocFlag::AllocZero).unwrap();
             pde.set(pa, PTE_U | PTE_P | PTE_W);
+            allocator.incref_pde(pde);
         }
 
         let pt = pde.table();
@@ -231,6 +229,45 @@ impl PageDirectory {
             pte.set(pa, perm | PTE_P);
             // println!("0x{:x}", pte.0);
         }
+    }
+
+    // Return the page mapped at virtual address 'va'.
+    // PTE is used by page_remove and
+    // can be used to verify page permissions for syscall arguments,
+    // but should not be used by most callers.
+    //
+    // Return None if there is no page mapped at va.
+    fn lookup(&mut self, va: VirtAddr, allocator: &mut PageAllocator) -> Option<&mut PTE> {
+        self.walk(va, false, allocator)
+    }
+
+    // Unmaps the physical page at virtual address 'va'.
+    // If there is no physical page at that address, silently does nothing.
+    //
+    // Details:
+    //   - The ref count on the physical page should decrement.
+    //   - The physical page should be freed if the refcount reaches 0.
+    //   - The pg table entry corresponding to 'va' should be set to 0.
+    //     (if such a PTE exists)
+    //   - The TLB must be invalidated if you remove an entry from
+    //     the page table.
+    fn remove(&mut self, va: VirtAddr, allocator: &mut PageAllocator) {
+        match self.lookup(va, allocator) {
+            None => (),
+            Some(pte) => {
+                allocator.decref_pte(pte);
+                pte.clear();
+                self.tlb_invalidate(va);
+            }
+        }
+    }
+
+    /// Invalidate a TLB entry, but only if the page tables being
+    /// edited are the ones currently in use by the processor.
+    fn tlb_invalidate(&self, va: VirtAddr) {
+        // Flush the entry only if we're modifying the current address space.
+        // For now, there is only one address space, so always invalidate.
+        x86::invlpg(va);
     }
 }
 
@@ -347,6 +384,10 @@ impl PTE {
     fn set(&mut self, pa: PhysAddr, attr: u32) {
         self.0 = pa.0 | attr;
     }
+
+    fn clear(&mut self) {
+        self.0 = 0;
+    }
 }
 
 fn round_up_u32(x: u32, base: u32) -> u32 {
@@ -436,18 +477,6 @@ pub fn mem_init() {
     println!("pages: 0x{:?}", pages);
 
     println!("page_free_list: 0x{:?}", allocator.page_free_list);
-    let p1 = allocator.alloc(AllocFlag::None);
-    let p2 = allocator.alloc(AllocFlag::AllocZero);
-    println!("p1: 0x{:?}, p2: 0x{:?}", p1, p2);
-    allocator.free(p2);
-    allocator.free(p1);
-    println!("page_free_list: 0x{:?}", allocator.page_free_list);
-    let p1 = allocator.alloc(AllocFlag::None);
-    let p2 = allocator.alloc(AllocFlag::AllocZero);
-    println!("p1: 0x{:?}, p2: 0x{:?}", p1, p2);
-    allocator.free(p2);
-    allocator.free(p1);
-    println!("page_free_list: 0x{:?}", allocator.page_free_list);
 
     let x = kern_pgdir.walk(VirtAddr(0x00001000), false, &mut allocator);
     println!("pte: {:?}", x);
@@ -512,6 +541,21 @@ pub fn mem_init() {
     cr0 |= CR0_PE | CR0_PG | CR0_AM | CR0_WP | CR0_NE | CR0_MP;
     cr0 &= !(CR0_TS | CR0_EM);
     x86::lcr0(cr0);
+
+    let x = kern_pgdir
+        .lookup(VirtAddr(0xf0000000), &mut allocator)
+        .unwrap();
+    println!("pte: 0x{:x}", x.0);
+    let x = kern_pgdir
+        .lookup(VirtAddr(0xf0001000), &mut allocator)
+        .unwrap();
+    println!("pte: 0x{:x}", x.0);
+
+    // kern_pgdir.remove(VirtAddr(0xf0001000), &mut allocator);
+    // let x = kern_pgdir.lookup(VirtAddr(0xf0001000), &mut allocator);
+    // if x.is_some() {
+    //     panic!("should be none");
+    // }
 }
 
 // --------------------------------------------------------------
@@ -520,6 +564,7 @@ pub fn mem_init() {
 // Pages are reference counted, and free pages are kept on a linked list.
 // --------------------------------------------------------------
 
+#[derive(Debug)]
 #[repr(C)]
 struct PageInfo {
     pp_link: *mut PageInfo,
@@ -601,11 +646,11 @@ impl PageAllocator {
     /// page_free can check for double-free bugs.
     ///
     /// Returns NULL if out of free memory.
-    fn alloc(&mut self, flag: AllocFlag) -> *mut PageInfo {
+    fn alloc(&mut self, flag: AllocFlag) -> Option<PhysAddr> {
         unsafe {
             let pp = self.page_free_list;
             if pp == null_mut() {
-                return null_mut();
+                return None;
             }
 
             self.page_free_list = (*pp).pp_link;
@@ -620,7 +665,8 @@ impl PageAllocator {
 
             (*pp).pp_ref = 0;
             (*pp).pp_link = null_mut();
-            pp
+
+            Some(self.to_pa(pp))
         }
     }
 
@@ -628,6 +674,37 @@ impl PageAllocator {
         unsafe {
             let offset = pp.offset_from(self.pages) as u32;
             PhysAddr(offset << PGSHIFT)
+        }
+    }
+
+    // TODO: summarize PDE and PTE
+    fn incref_pte(&self, pte: &PTE) {
+        let offset = (pte.0 >> PGSHIFT) as isize;
+        let pp = unsafe { &mut *(self.pages.offset(offset)) };
+        pp.pp_ref += 1;
+    }
+
+    fn incref_pde(&self, pde: &PDE) {
+        let offset = (pde.0 >> PGSHIFT) as isize;
+        let pp = unsafe { &mut *(self.pages.offset(offset)) };
+        pp.pp_ref += 1;
+    }
+
+    fn decref_pte(&mut self, pte: &PTE) {
+        let offset = (pte.0 >> PGSHIFT) as isize;
+        let pp = unsafe { &mut *(self.pages.offset(offset)) };
+        pp.pp_ref -= 1;
+        if pp.pp_ref == 0 {
+            self.free(pp);
+        }
+    }
+
+    fn decref_pde(&mut self, pde: &PDE) {
+        let offset = (pde.0 >> PGSHIFT) as isize;
+        let pp = unsafe { &mut *(self.pages.offset(offset)) };
+        pp.pp_ref -= 1;
+        if pp.pp_ref == 0 {
+            self.free(pp);
         }
     }
 
