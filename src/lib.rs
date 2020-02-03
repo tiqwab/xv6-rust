@@ -4,6 +4,7 @@
 #![feature(bool_to_option)]
 #![feature(ptr_offset_from)]
 #![feature(alloc_error_handler)]
+#![feature(const_in_array_repeat_expressions)]
 
 // This must come first to resolve macro?
 #[macro_use]
@@ -11,6 +12,7 @@ pub mod console;
 
 mod allocator;
 pub mod constants;
+mod env;
 mod kclock;
 mod pmap;
 pub mod serial;

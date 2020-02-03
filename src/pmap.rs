@@ -151,7 +151,7 @@ impl BootAllocator {
 
 #[repr(align(4096))]
 #[repr(C)]
-struct PageDirectory {
+pub(crate) struct PageDirectory {
     entries: [PDE; NPDENTRIES],
 }
 
@@ -334,7 +334,7 @@ impl IndexMut<PDX> for PageDirectory {
 
 #[derive(Debug)]
 #[repr(C)]
-struct PDE(u32);
+pub(crate) struct PDE(u32);
 
 impl PDE {
     fn new(pa: PhysAddr, attr: u32) -> PDE {
