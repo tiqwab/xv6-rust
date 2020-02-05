@@ -16,8 +16,9 @@ pub(crate) const KSTKGAP: u32 = (8 * PGSIZE);
 pub(crate) const MMIOLIM: u32 = KSTACKTOP - (PTSIZE as u32);
 pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
 pub(crate) const ULIM: u32 = MMIOBASE;
-pub(crate) const UVPT: u32 = ULIM - (PTSIZE as u32);
-pub(crate) const UPAGES: u32 = UVPT - (PTSIZE as u32);
+// Assign kernel heap area instead of Cur. Page Table, RO PAGES, and RO ENVS in JOS
+pub(crate) const KHEAP_BASE: u32 = ULIM - KHEAP_SIZE as u32;
+pub(crate) const KHEAP_SIZE: usize = 3 * PTSIZE;
 
 pub(crate) const CR0_PE: u32 = 0x0000001; // Protection Enable
 pub(crate) const CR0_MP: u32 = 0x0000002; // Monitor coProcessor

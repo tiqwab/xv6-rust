@@ -227,7 +227,7 @@ impl PageDirectory {
             let pa = start_pa + i * (PGSIZE as usize);
             let pte = self.walk(va, true, allocator).unwrap();
             pte.set(pa, perm | PTE_P);
-            // println!("0x{:x}", pte.0);
+            // println!("va: 0x{:x}, pte: 0x{:x}", va.0, pte.0);
         }
     }
 
@@ -483,21 +483,9 @@ pub fn mem_init() {
     let bss_end = VirtAddr(unsafe { &end as *const _ as u32 });
     let mut boot_allocator = BootAllocator::new(bss_end);
     let kern_pgdir_va = boot_allocator.alloc(PGSIZE);
+    let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
     println!("kern_pgdir: 0x{:x}", kern_pgdir_va.0);
     // memset(kern_pgdir, 0, PGSIZE);
-
-    // Recursively insert PD in itself as a page table, to form
-    // a virtual page table at virtual address UVPT.
-    // Permissions: kernel R, user R
-    let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
-    let uvpt = VirtAddr(UVPT);
-    let entry = PDE::new(kern_pgdir_va.to_pa(), PTE_P | PTE_U);
-    let index = PDX(uvpt);
-    kern_pgdir[index] = entry;
-    println!(
-        "&kern_pgdir[PDX(uvpt)](0x{:?}): 0x{:x}",
-        &kern_pgdir[index] as *const PDE, kern_pgdir[index].0
-    );
 
     // Allocate an array of npages 'struct PageInfo's and store it in 'pages'.
     // The kernel uses this array to keep track of physical pages: for
@@ -506,6 +494,12 @@ pub fn mem_init() {
     // to initialize all fields of each struct PageInfo to 0.
     let page_info_size = mem::size_of::<PageInfo>();
     let pages = boot_allocator.alloc(npages * page_info_size as u32).0 as *mut PageInfo;
+
+    // Allocate kernel heap
+    println!("before: 0x{:x}", boot_allocator.alloc(0).0);
+    let kheap = boot_allocator.alloc(KHEAP_SIZE as u32).0 as *mut PageInfo;
+    println!("kheap: {:?}", kheap);
+    println!("after: 0x{:x}", boot_allocator.alloc(0).0);
 
     // Now that we've allocated the initial kernel data structures, we set
     // up the list of free physical pages. Once we've done so, all further
@@ -524,16 +518,13 @@ pub fn mem_init() {
 
     // Now we set up virtual memory
 
-    // Map 'pages' read-only by the user at linear address UPAGES
-    // Permissions:
-    //    - the new image at UPAGES -- kernel R, user R
-    //      (ie. perm = PTE_U | PTE_P)
-    //    - pages itself -- kernel RW, user NONE
+    // Map kernel heap
+    // This mapping is not in neither xv6 nor jos.
     kern_pgdir.boot_map_region(
-        VirtAddr(UPAGES),
-        round_up_u32(npages * (page_info_size as u32), PGSIZE) as usize,
-        VirtAddr(pages as u32).to_pa(),
-        PTE_U | PTE_P,
+        VirtAddr(KHEAP_BASE),
+        KHEAP_SIZE,
+        VirtAddr(kheap as u32).to_pa(),
+        PTE_P | PTE_W,
         &mut allocator,
     );
 

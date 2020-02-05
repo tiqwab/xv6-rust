@@ -3,10 +3,13 @@
 #![feature(asm)]
 #![feature(bool_to_option)]
 #![feature(ptr_offset_from)]
+#![feature(alloc_error_handler)]
 
+// This must come first to resolve macro?
 #[macro_use]
-
 pub mod console;
+
+mod allocator;
 pub mod constants;
 mod kclock;
 mod pmap;
@@ -15,14 +18,26 @@ pub mod vga_buffer;
 pub mod volatile;
 mod x86;
 
+extern crate alloc;
+extern crate linked_list_allocator;
+
+use crate::allocator::HeapAllocator;
 use constants::*;
 use core::panic::PanicInfo;
 use vga_buffer::Buffer;
+
+#[global_allocator]
+static ALLOCATOR: allocator::HeapAllocator = allocator::HeapAllocator;
 
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{}", info);
     loop {}
+}
+
+#[alloc_error_handler]
+fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
+    panic!("allocation error: {:?}", layout);
 }
 
 #[no_mangle]
@@ -33,6 +48,14 @@ pub fn lib_main() {
     serial::init_serial();
 
     pmap::mem_init();
+
+    unsafe { HeapAllocator::init(KHEAP_BASE as usize, KHEAP_SIZE) };
+
+    {
+        let mut a = alloc::boxed::Box::new(1);
+        *a += 1;
+        println!("a = {}", *a);
+    }
 
     print!("H");
     println!("ello");
