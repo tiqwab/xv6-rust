@@ -1,6 +1,7 @@
 use core::ptr::null_mut;
 
 use crate::pmap::PageDirectory;
+use alloc::boxed::Box;
 
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
@@ -12,11 +13,13 @@ struct Trapframe {}
 struct EnvId(u32);
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum EnvType {
     User,
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 enum EnvStatus {
     Free,
     Dying,
@@ -25,7 +28,6 @@ enum EnvStatus {
     NotRunnable,
 }
 
-#[derive(Debug)]
 #[repr(C)]
 struct Env {
     env_tf: Trapframe,     // Saved registers
@@ -35,12 +37,11 @@ struct Env {
     env_status: EnvStatus, // Status of the environment
     env_runs: u32,         // Number of times environment has run
     // FIXME: what type is better for env_pgdir?
-    env_pgdir: *mut PageDirectory, // Kernel virtual address of page dir
+    env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
 }
 
 impl Env {
-    /// Only used to initialize ENV_TABLE
-    const fn new() -> Env {
+    fn new() -> Env {
         Env {
             env_tf: Trapframe {},
             env_id: EnvId(0),
@@ -48,15 +49,15 @@ impl Env {
             env_type: EnvType::User,
             env_status: EnvStatus::Free,
             env_runs: 0,
-            env_pgdir: null_mut(),
+            env_pgdir: Box::new(PageDirectory::new()),
         }
     }
 }
 
 struct EnvTable {
-    envs: [Env; NENV as usize],
+    envs: [Option<Env>; NENV as usize],
 }
 
 static mut ENV_TABLE: EnvTable = EnvTable {
-    envs: [Env::new(); NENV as usize],
+    envs: [None; NENV as usize],
 };

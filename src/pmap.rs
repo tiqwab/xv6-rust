@@ -160,6 +160,12 @@ pub(crate) struct PageDirectory {
 struct PDX(VirtAddr);
 
 impl PageDirectory {
+    pub(crate) const fn new() -> PageDirectory {
+        PageDirectory {
+            entries: [PDE::empty(); NPDENTRIES],
+        }
+    }
+
     fn get(&mut self, pdx: PDX) -> Option<&mut PDE> {
         if self[pdx].exists() {
             Some(&mut self[pdx])
@@ -341,6 +347,10 @@ impl PDE {
         let mut pde = PDE(0);
         pde.set(pa, attr);
         pde
+    }
+
+    const fn empty() -> PDE {
+        PDE(0)
     }
 
     fn exists(&self) -> bool {
