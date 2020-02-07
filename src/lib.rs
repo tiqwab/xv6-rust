@@ -5,6 +5,10 @@
 #![feature(ptr_offset_from)]
 #![feature(alloc_error_handler)]
 #![feature(const_in_array_repeat_expressions)]
+#![feature(const_raw_ptr_to_usize_cast)]
+#![feature(thread_local)]
+// FIXME: remove later
+#![allow(dead_code)]
 
 // This must come first to resolve macro?
 #[macro_use]
@@ -13,6 +17,7 @@ pub mod console;
 mod allocator;
 pub mod constants;
 mod env;
+mod gdt;
 mod kclock;
 mod pmap;
 pub mod serial;
@@ -58,6 +63,8 @@ pub fn lib_main() {
         *a += 1;
         println!("a = {}", *a);
     }
+
+    gdt::init_percpu();
 
     print!("H");
     println!("ello");

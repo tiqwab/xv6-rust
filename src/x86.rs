@@ -1,3 +1,4 @@
+use crate::gdt::DescriptorTablePointer;
 use crate::pmap::{PhysAddr, VirtAddr};
 
 #[inline]
@@ -36,4 +37,14 @@ pub(crate) fn lcr0(value: u32) {
 #[inline]
 pub(crate) fn invlpg(va: VirtAddr) {
     unsafe { asm!("invlpg ($0)" :: "r"(va.0) : "memory" : "volatile") }
+}
+
+#[inline]
+pub(crate) fn lgdt(p: &DescriptorTablePointer) {
+    unsafe { asm!("lgdt ($0)" :: "r"(p) : "memory" : "volatile") }
+}
+
+#[inline]
+pub(crate) fn lldt(p: &DescriptorTablePointer) {
+    unsafe { asm!("lldt ($0)" :: "r"(p) : "memory" : "volatile") }
 }

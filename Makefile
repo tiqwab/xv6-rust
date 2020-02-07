@@ -47,6 +47,8 @@ LDFLAGS := -m elf_i386
 # try to generate a unique GDB port
 GDBPORT	:= 12345
 
+# Enter QEMU monitor by 'Ctrl+a then c' if -serial mon:stdio is specified
+# ref. https://kashyapc.wordpress.com/2016/02/11/qemu-command-line-behavior-of-serial-stdio-vs-serial-monstdio/
 QEMUOPTS := $(QEMUOPTS)
 QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT)
 QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)

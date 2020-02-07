@@ -16,7 +16,7 @@ pub(crate) struct VirtAddr(pub(crate) u32);
 
 impl VirtAddr {
     /// VirtualAddr in kernel can be converted into PhysAddr.
-    fn to_pa(&self) -> PhysAddr {
+    pub(crate) fn to_pa(&self) -> PhysAddr {
         if self.0 < KERN_BASE {
             panic!(
                 "cannot convert virtual address 0x{:x} to physical address",
@@ -63,7 +63,7 @@ impl Sub<usize> for VirtAddr {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PhysAddr(pub(crate) u32);
 
 impl PhysAddr {
@@ -197,7 +197,7 @@ impl PageDirectory {
             if !should_create {
                 return None;
             }
-            let pa = allocator.alloc(AllocFlag::AllocZero).unwrap();
+            let pa = allocator.alloc(AllocFlag::AllocZero).expect("alloc failed");
             pde.set(pa, PTE_U | PTE_P | PTE_W);
             allocator.incref_pde(pde);
         }
@@ -521,11 +521,6 @@ pub fn mem_init() {
 
     println!("page_free_list: 0x{:?}", allocator.page_free_list);
 
-    let x = kern_pgdir.walk(VirtAddr(0x00001000), false, &mut allocator);
-    println!("pte: {:?}", x);
-    let x = kern_pgdir.walk(VirtAddr(0x00001000), true, &mut allocator);
-    println!("pte: {:?}", x);
-
     // Now we set up virtual memory
 
     // Map kernel heap
@@ -661,11 +656,19 @@ impl PageAllocator {
             if i == 0 {
                 continue;
             }
+
+            // i == 7, 8 (around 0x7c00 as physical address) is used by boot loader,
+            // but it is no longer required
+            // if i == 7 || i == 8 {
+            //     continue;
+            // }
+
             // already used in kernel
             if i >= npages_basemem && i < first_free_page {
                 continue;
             }
             let page = unsafe { &mut *(self.pages.add(i as usize)) };
+            // println!("page[{}]: {:?}", i, page);
             page.pp_ref = 0;
             page.pp_link = self.page_free_list;
             self.page_free_list = page as *mut PageInfo;
