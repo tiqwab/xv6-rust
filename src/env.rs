@@ -1,20 +1,18 @@
-use core::ptr::null_mut;
+use alloc::boxed::Box;
+use core::ptr::{null, null_mut};
 
 use crate::pmap::PageDirectory;
-use alloc::boxed::Box;
+use crate::trap::Trapframe;
 
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
-
-#[derive(Debug)]
-struct Trapframe {}
 
 #[derive(Debug)]
 struct EnvId(u32);
 
 #[derive(Debug)]
 #[allow(dead_code)]
-enum EnvType {
+pub(crate) enum EnvType {
     User,
 }
 
@@ -40,20 +38,6 @@ struct Env {
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
 }
 
-impl Env {
-    fn new() -> Env {
-        Env {
-            env_tf: Trapframe {},
-            env_id: EnvId(0),
-            env_parent_id: EnvId(0),
-            env_type: EnvType::User,
-            env_status: EnvStatus::Free,
-            env_runs: 0,
-            env_pgdir: Box::new(PageDirectory::new()),
-        }
-    }
-}
-
 struct EnvTable {
     envs: [Option<Env>; NENV as usize],
 }
@@ -61,3 +45,113 @@ struct EnvTable {
 static mut ENV_TABLE: EnvTable = EnvTable {
     envs: [None; NENV as usize],
 };
+
+static mut NEXT_ENV_ID: u32 = 1;
+
+fn generate_env_id() -> EnvId {
+    unsafe {
+        let env_id = EnvId(NEXT_ENV_ID);
+        NEXT_ENV_ID += 1;
+        env_id
+    }
+}
+
+// Initialize the kernel virtual memory layout for environment e.
+// Allocate a page directory, set e->env_pgdir accordingly,
+// and initialize the kernel portion of the new environment's address space.
+// Do NOT (yet) map anything into the user portion
+// of the environment's virtual address space.
+//
+// Returns 0 on success, < 0 on error.  Errors include:
+//	-E_NO_MEM if page directory or table could not be allocated.
+fn env_setup_vm() -> Box<PageDirectory> {
+    PageDirectory::new_for_user()
+}
+
+/// Allocates and initializes a new environment.
+/// On success, the new environment is stored in *newenv_store.
+///
+/// Returns 0 on success, < 0 on failure.  Errors include:
+///	-E_NO_FREE_ENV if all NENV environments are allocated
+///	-E_NO_MEM on memory exhaustion
+fn env_alloc(parent_id: EnvId, typ: EnvType) -> &'static mut Env {
+    unsafe {
+        let mut idx = -1;
+        for (i, env_opt) in ENV_TABLE.envs.iter().enumerate() {
+            if env_opt.is_none() {
+                idx = i as i32;
+                break;
+            }
+        }
+        if idx == -1 {
+            panic!("no available env");
+        }
+
+        // Allocate and set up the page directory for this environment.
+        let new_pgdir = env_setup_vm();
+
+        // Generate an env_id for this environment.
+        let new_id = generate_env_id();
+
+        // Set up appropriate initial values for the segment registers.
+        // You will set e->env_tf.tf_eip later.
+        let new_tf = Trapframe::new_for_user();
+
+        let new_env = Env {
+            env_tf: new_tf,
+            env_id: new_id,
+            env_parent_id: parent_id,
+            env_type: typ,
+            env_status: EnvStatus::Runnable,
+            env_runs: 0,
+            env_pgdir: new_pgdir,
+        };
+
+        let env_opt = &mut ENV_TABLE.envs[idx as usize];
+        *env_opt = Some(new_env);
+
+        env_opt.as_mut().unwrap()
+    }
+}
+
+/// Set up the initial program binary, stack, and processor flags
+/// for a user process.
+/// This function is ONLY called during kernel initialization,
+/// before running the first user-mode environment.
+///
+/// This function loads all loadable segments from the ELF binary image
+/// into the environment's user memory, starting at the appropriate
+/// virtual addresses indicated in the ELF program header.
+/// At the same time it clears to zero any portions of these segments
+/// that are marked in the program header as being mapped
+/// but not actually present in the ELF file - i.e., the program's bss section.
+///
+/// All this is very similar to what our boot loader does, except the boot
+/// loader also needs to read the code from disk.  Take a look at
+/// boot/main.c to get ideas.
+///
+/// Finally, this function maps one page for the program's initial stack.
+fn load_icode(env: &mut Env, binary: *const u8) {
+    unimplemented!()
+}
+
+/// Allocates a new env with env_alloc, loads the named elf
+/// binary into it with load_icode, and sets its env_type.
+/// This function is ONLY called during kernel initialization,
+/// before running the first user-mode environment.
+/// The new env's parent ID is set to 0.
+pub(crate) fn env_create(typ: EnvType) {
+    let env = env_alloc(EnvId(0), typ);
+    load_icode(env, null());
+
+    // void
+    // env_create(uint8_t *binary, enum EnvType type)
+    // {
+    //     struct Env *e;
+    //     if (env_alloc(&e, 0) < 0) {
+    //         panic("failed in env_create");
+    //     }
+    //     e->env_type = type;
+    //     load_icode(e, binary);
+    // }
+}

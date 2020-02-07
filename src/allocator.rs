@@ -22,7 +22,11 @@ unsafe impl GlobalAlloc for HeapAllocator {
                 panic!("allocation error: {:?}", alloc_err);
             }
             Ok(res) => {
-                println!("HeapAllocator: allocated for {:?}", layout);
+                println!(
+                    "HeapAllocator: allocated for {:?} at 0x{:?}",
+                    layout,
+                    res.as_ptr()
+                );
                 res.as_ptr()
             }
         }

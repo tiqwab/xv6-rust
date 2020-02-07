@@ -20,6 +20,10 @@ pub(crate) const ULIM: u32 = MMIOBASE;
 pub(crate) const KHEAP_BASE: u32 = ULIM - KHEAP_SIZE as u32;
 pub(crate) const KHEAP_SIZE: usize = 3 * PTSIZE;
 
+pub(crate) const UTOP: u32 = KHEAP_BASE;
+pub(crate) const UXSTACKTOP: u32 = UTOP;
+pub(crate) const USTACKTOP: u32 = UTOP - (2 * PGSIZE as u32);
+
 pub(crate) const CR0_PE: u32 = 0x0000001; // Protection Enable
 pub(crate) const CR0_MP: u32 = 0x0000002; // Monitor coProcessor
 pub(crate) const CR0_EM: u32 = 0x0000004; // Emulation

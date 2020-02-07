@@ -21,6 +21,7 @@ mod gdt;
 mod kclock;
 mod pmap;
 pub mod serial;
+mod trap;
 pub mod vga_buffer;
 pub mod volatile;
 mod x86;
@@ -29,6 +30,7 @@ extern crate alloc;
 extern crate linked_list_allocator;
 
 use crate::allocator::HeapAllocator;
+use crate::env::EnvType;
 use constants::*;
 use core::panic::PanicInfo;
 use vga_buffer::Buffer;
@@ -65,6 +67,8 @@ pub fn lib_main() {
     }
 
     gdt::init_percpu();
+
+    env::env_create(EnvType::User);
 
     print!("H");
     println!("ello");

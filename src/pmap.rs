@@ -5,11 +5,14 @@ use core::ptr::{null, null_mut};
 use crate::constants::*;
 use crate::kclock;
 use crate::x86;
+use alloc::boxed::Box;
 
 extern "C" {
     static end: u32;
     static bootstack: u32;
 }
+
+static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct VirtAddr(pub(crate) u32);
@@ -164,6 +167,21 @@ impl PageDirectory {
         PageDirectory {
             entries: [PDE::empty(); NPDENTRIES],
         }
+    }
+
+    pub(crate) fn new_for_user() -> Box<PageDirectory> {
+        let mut pgdir = PageDirectory::new();
+        unsafe {
+            let kern_pgdir = KERN_PGDIR.as_ref().expect("KERN_PGDIR is not initialized");
+            // Copy kernel mapping
+            for (i, kern_pde) in kern_pgdir.entries.iter().enumerate() {
+                if kern_pde.exists() {
+                    let pde = PDE(kern_pde.0);
+                    pgdir.entries[i] = pde;
+                }
+            }
+        }
+        Box::new(pgdir)
     }
 
     fn get(&mut self, pdx: PDX) -> Option<&mut PDE> {
@@ -601,6 +619,10 @@ pub fn mem_init() {
     let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
     if x.is_some() {
         panic!("should be none");
+    }
+
+    unsafe {
+        KERN_PGDIR = Some(kern_pgdir);
     }
 }
 
