@@ -16,6 +16,7 @@ pub mod console;
 
 mod allocator;
 pub mod constants;
+mod elf;
 mod env;
 mod gdt;
 mod kclock;

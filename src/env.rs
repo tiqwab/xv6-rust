@@ -140,7 +140,7 @@ fn env_alloc(parent_id: EnvId, typ: EnvType) -> &'static mut Env {
 fn load_icode(env: &mut Env, binary: *const u8) {
     // TODO:
     // - [x] include binary to kernel
-    // - [ ] prepare struct for Elf
+    // - [x] prepare struct for Elf
     // - [ ] implement load_icode
     unimplemented!()
 }
