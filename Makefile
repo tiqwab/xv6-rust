@@ -16,6 +16,7 @@ OBJDUMP := objdump
 OBJCOPY := objcopy
 DD := dd
 CP := cp
+NM := nm
 QEMU := qemu-system-i386
 GDB := gdb
 
@@ -37,9 +38,8 @@ CFLAGS += -fno-tree-ch
 # Add -fno-stack-protector if the option exists.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
-KERN_CFLAGS := $(CFLAGS) -gstabs
-KERN_BINARY := target/i686-xv6rust/debug/xv6-rust
-KERN_TEST_BINARY := target/i686-xv6rust/debug/test
+BOOT_CFLAGS := $(CFLAGS) -gstabs
+USER_CFLAGS := $(CFLAGS) -gstabs
 
 # Common linker flags
 LDFLAGS := -m elf_i386
@@ -53,8 +53,10 @@ QEMUOPTS := $(QEMUOPTS)
 QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT)
 QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 
+UPROGS :=
 
 include boot/module.mk
+include user/module.mk
 
 default: all
 
@@ -76,6 +78,9 @@ qemu-gdb: image .gdbinit
 test: test-image
 	$(QEMU) $(QEMUOPTS)
 
+KERN_BINARY := target/i686-xv6rust/debug/xv6-rust
+KERN_TEST_BINARY := target/i686-xv6rust/debug/test
+
 image: $(OBJDIR)/boot/boot kernel
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	$(DD) conv=notrunc if=$(KERN_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
@@ -84,10 +89,17 @@ test-image: $(OBJDIR)/boot/boot kernel
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	dd conv=notrunc if=$(KERN_TEST_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
-kernel:
+# `-C link-arg` option can be passed by target json (such as post-link-args field) instead?
+KERN_BINARY_ARGS := $(patsubst %,-C link-arg=%, $(UPROGS))
+KERN_RUSTFLAGS := -Z print-link-args -C link-arg=-b -C link-arg=binary $(KERN_BINARY_ARGS) -C link-arg=-b -C link-arg=default
+
+# KERN_CFLAGS is currently used only for compiling c program by cc crate.
+# '--compress-debug-sections' is temporary fix for 'contains a compressed section, but zlib is not available'
+KERN_CFLAGS := -Wa,--compress-debug-sections=none -Wl,--compress-debug-sections=none
+
+kernel: $(UPROGS)
 	@mkdir -p $(OBJDIR)
-	# '--compress-debug-sections' is temporary fix for 'contains a compressed section, but zlib is not available'
-	CFLAGS="-Wa,--compress-debug-sections=none -Wl,--compress-debug-sections=none" cargo xbuild --target i686-xv6rust.json --verbose
+	RUSTFLAGS="$(KERN_RUSTFLAGS)" CFLAGS="$(KERN_CFLAGS)" cargo xbuild --target i686-xv6rust.json --verbose
 	$(OBJDUMP) -S $(KERN_BINARY) > $(OBJDIR)/xv6-rust.asm
 	$(OBJDUMP) -S $(KERN_TEST_BINARY) > $(OBJDIR)/xv6-rust-test.asm
 

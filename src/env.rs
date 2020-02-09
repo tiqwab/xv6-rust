@@ -4,6 +4,12 @@ use core::ptr::{null, null_mut};
 use crate::pmap::PageDirectory;
 use crate::trap::Trapframe;
 
+extern "C" {
+    static _binary_obj_user_nop_start: u8;
+    static _binary_obj_user_nop_end: u8;
+    static _binary_obj_user_nop_size: usize;
+}
+
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
 
@@ -132,6 +138,10 @@ fn env_alloc(parent_id: EnvId, typ: EnvType) -> &'static mut Env {
 ///
 /// Finally, this function maps one page for the program's initial stack.
 fn load_icode(env: &mut Env, binary: *const u8) {
+    // TODO:
+    // - [x] include binary to kernel
+    // - [ ] prepare struct for Elf
+    // - [ ] implement load_icode
     unimplemented!()
 }
 
@@ -142,6 +152,22 @@ fn load_icode(env: &mut Env, binary: *const u8) {
 /// The new env's parent ID is set to 0.
 pub(crate) fn env_create(typ: EnvType) {
     let env = env_alloc(EnvId(0), typ);
+
+    unsafe {
+        println!(
+            "_binary_obj_user_nop_start: {:?}",
+            &_binary_obj_user_nop_start as *const u8
+        );
+        println!(
+            "_binary_obj_user_nop_end: {:?}",
+            &_binary_obj_user_nop_end as *const u8
+        );
+        println!(
+            "_binary_obj_user_nop_size: {:?}",
+            &_binary_obj_user_nop_size as *const usize
+        );
+    }
+
     load_icode(env, null());
 
     // void
