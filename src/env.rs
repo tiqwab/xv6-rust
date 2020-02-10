@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 use core::ptr::{null, null_mut};
 
 use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType, Secthdr, SecthdrType, ELF_MAGIC};
-use crate::pmap::PageDirectory;
+use crate::pmap::{PageDirectory, VirtAddr};
 use crate::trap::Trapframe;
 
 extern "C" {
@@ -145,13 +145,21 @@ fn load_icode(env: &mut Env, binary: *const u8) {
     // - [ ] implement load_icode
 
     unsafe {
+        // TODO: lcr3()
+
         let elf = {
             let e = ElfParser::new(binary);
             e.expect("binary is not elf")
         };
 
         for ph in elf.program_headers() {
-            println!("{:?}", ph.p_type);
+            if ph.p_type != ProghdrType::PtLoad {
+                continue;
+            }
+
+            env.env_pgdir
+                .as_mut()
+                .region_alloc(VirtAddr(ph.p_vaddr), ph.p_memsz as usize);
         }
     }
 }

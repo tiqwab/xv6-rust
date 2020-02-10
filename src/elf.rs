@@ -108,7 +108,7 @@ impl Proghdr {
 /// enum for p_type of Proghdr.
 /// There are some types which don't exist in the spec but added by compiler.
 /// ref. http://sugawarayusuke.hatenablog.com/entry/2017/04/09/213133
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub(crate) enum ProghdrType {
     PtNull = 0,
@@ -163,7 +163,7 @@ pub(crate) struct Secthdr {
     pub(crate) sh_entsize: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u32)]
 pub(crate) enum SecthdrType {
     ShtNull = 0,

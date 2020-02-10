@@ -1,5 +1,5 @@
 use core::mem;
-use core::ops::{Add, Index, IndexMut, Sub};
+use core::ops::{Add, AddAssign, Index, IndexMut, Sub};
 use core::ptr::{null, null_mut};
 
 use crate::constants::*;
@@ -13,8 +13,9 @@ extern "C" {
 }
 
 static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
+static mut PAGE_ALLOCATOR: Option<PageAllocator> = None;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VirtAddr(pub(crate) u32);
 
 impl VirtAddr {
@@ -32,6 +33,14 @@ impl VirtAddr {
     fn is_aligned(&self) -> bool {
         self.0 % PGSIZE == 0
     }
+
+    pub(crate) fn round_up(&self, size: usize) -> VirtAddr {
+        VirtAddr(round_up_u32(self.0, PGSIZE))
+    }
+
+    pub(crate) fn round_down(&self, size: usize) -> VirtAddr {
+        VirtAddr(round_down_u32(self.0, PGSIZE))
+    }
 }
 
 impl Add<u32> for VirtAddr {
@@ -47,6 +56,18 @@ impl Add<usize> for VirtAddr {
 
     fn add(self, rhs: usize) -> Self::Output {
         VirtAddr(self.0 + (rhs as u32))
+    }
+}
+
+impl AddAssign<u32> for VirtAddr {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs;
+    }
+}
+
+impl AddAssign<usize> for VirtAddr {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs as u32;
     }
 }
 
@@ -140,12 +161,12 @@ impl BootAllocator {
     fn alloc(&mut self, n: u32) -> VirtAddr {
         match self.next_free.take() {
             None => {
-                let next = round_up_va(self.bss_end, PGSIZE);
-                self.next_free = Some(round_up_va(next + n, PGSIZE));
+                let next = self.bss_end.round_up(PGSIZE as usize);
+                self.next_free = Some((next + n).round_up(PGSIZE as usize));
                 next
             }
             Some(next) => {
-                self.next_free = Some(round_up_va(next + n, PGSIZE));
+                self.next_free = Some((next + n).round_up(PGSIZE as usize));
                 next
             }
         }
@@ -324,6 +345,27 @@ impl PageDirectory {
         }
         old_pte.set(new_pte.addr(), new_pte.attr());
     }
+
+    /// Allocate len bytes of physical memory for environment env,
+    /// and map it at virtual address va in the environment's address space.
+    /// Does not zero or otherwise initialize the mapped pages in any way.
+    /// Pages should be writable by user and kernel.
+    /// Panic if any allocation attempt fails.
+    pub(crate) fn region_alloc(&mut self, va: VirtAddr, len: usize) {
+        println!("va: 0x{:x}, len: {}", va.0, len);
+        unsafe {
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+            let start_va = va.round_down(PGSIZE as usize);
+            let end_va = va.add(len).round_up(PGSIZE as usize);
+
+            let mut va = start_va;
+            while va < end_va {
+                let pa = allocator.alloc(AllocFlag::None).unwrap();
+                self.insert(pa, va, PTE_U | PTE_W, allocator);
+                va += PGSIZE;
+            }
+        }
+    }
 }
 
 impl Index<usize> for PageDirectory {
@@ -461,8 +503,8 @@ fn round_up_u32(x: u32, base: u32) -> u32 {
     ((x - 1 + base) / base) * base
 }
 
-fn round_up_va(x: VirtAddr, base: u32) -> VirtAddr {
-    VirtAddr(round_up_u32(x.0, base))
+fn round_down_u32(x: u32, base: u32) -> u32 {
+    (x / base) * base
 }
 
 fn nvram_read(reg: u8) -> u16 {
@@ -623,6 +665,7 @@ pub fn mem_init() {
 
     unsafe {
         KERN_PGDIR = Some(kern_pgdir);
+        PAGE_ALLOCATOR = Some(allocator);
     }
 }
 
