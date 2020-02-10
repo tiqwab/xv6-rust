@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use core::ptr::{null, null_mut};
 
+use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType, Secthdr, SecthdrType, ELF_MAGIC};
 use crate::pmap::PageDirectory;
 use crate::trap::Trapframe;
 
@@ -142,7 +143,17 @@ fn load_icode(env: &mut Env, binary: *const u8) {
     // - [x] include binary to kernel
     // - [x] prepare struct for Elf
     // - [ ] implement load_icode
-    unimplemented!()
+
+    unsafe {
+        let elf = {
+            let e = ElfParser::new(binary);
+            e.expect("binary is not elf")
+        };
+
+        for ph in elf.program_headers() {
+            println!("{:?}", ph.p_type);
+        }
+    }
 }
 
 /// Allocates a new env with env_alloc, loads the named elf
@@ -154,21 +165,16 @@ pub(crate) fn env_create(typ: EnvType) {
     let env = env_alloc(EnvId(0), typ);
 
     unsafe {
-        println!(
-            "_binary_obj_user_nop_start: {:?}",
-            &_binary_obj_user_nop_start as *const u8
-        );
-        println!(
-            "_binary_obj_user_nop_end: {:?}",
-            &_binary_obj_user_nop_end as *const u8
-        );
-        println!(
-            "_binary_obj_user_nop_size: {:?}",
-            &_binary_obj_user_nop_size as *const usize
-        );
-    }
+        let user_nop_start = &_binary_obj_user_nop_start as *const u8;
+        let user_nop_end = &_binary_obj_user_nop_end as *const u8;
+        let user_nop_size = &_binary_obj_user_nop_size as *const usize;
 
-    load_icode(env, null());
+        println!("_binary_obj_user_nop_start: {:?}", user_nop_start);
+        println!("_binary_obj_user_nop_end: {:?}", user_nop_end);
+        println!("_binary_obj_user_nop_size: {:?}", user_nop_size);
+
+        load_icode(env, user_nop_start);
+    }
 
     // void
     // env_create(uint8_t *binary, enum EnvType type)
