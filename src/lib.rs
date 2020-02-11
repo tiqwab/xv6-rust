@@ -70,9 +70,10 @@ pub fn lib_main() {
 
     gdt::init_percpu();
 
-    env::env_create(EnvType::User);
-
     print!("H");
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);
+
+    let e = env::env_create(EnvType::User);
+    env::env_run(e);
 }

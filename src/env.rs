@@ -25,7 +25,7 @@ pub(crate) enum EnvType {
     User,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[allow(dead_code)]
 enum EnvStatus {
     Free,
@@ -36,7 +36,7 @@ enum EnvStatus {
 }
 
 #[repr(C)]
-struct Env {
+pub(crate) struct Env {
     env_tf: Trapframe,     // Saved registers
     env_id: EnvId,         // Unique environment identifier
     env_parent_id: EnvId,  // env_id of this env's parent
@@ -45,6 +45,25 @@ struct Env {
     env_runs: u32,         // Number of times environment has run
     // FIXME: what type is better for env_pgdir?
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
+}
+
+impl Env {
+    fn set_entry_point(&mut self, va: VirtAddr) {
+        self.env_tf.set_entry_point(va);
+    }
+
+    fn is_running(&self) -> bool {
+        self.env_status == EnvStatus::Running
+    }
+
+    fn pause(&mut self) {
+        self.env_status = EnvStatus::Runnable;
+    }
+
+    fn resume(&mut self) {
+        self.env_status = EnvStatus::Running;
+        self.env_runs += 1;
+    }
 }
 
 struct EnvTable {
@@ -56,6 +75,8 @@ static mut ENV_TABLE: EnvTable = EnvTable {
 };
 
 static mut NEXT_ENV_ID: u32 = 1;
+
+static mut CUR_ENV: Option<&mut Env> = None;
 
 fn generate_env_id() -> EnvId {
     unsafe {
@@ -179,7 +200,7 @@ unsafe fn load_icode(env: &mut Env, binary: *const u8) {
     x86::lcr3(kern_pgdir);
 
     // Set trapframe
-    env.env_tf.set_entry_point(elf.entry_point());
+    env.set_entry_point(elf.entry_point());
 }
 
 /// Allocates a new env with env_alloc, loads the named elf
@@ -187,7 +208,7 @@ unsafe fn load_icode(env: &mut Env, binary: *const u8) {
 /// This function is ONLY called during kernel initialization,
 /// before running the first user-mode environment.
 /// The new env's parent ID is set to 0.
-pub(crate) fn env_create(typ: EnvType) {
+pub(crate) fn env_create(typ: EnvType) -> &'static mut Env {
     let env = env_alloc(EnvId(0), typ);
 
     unsafe {
@@ -200,5 +221,45 @@ pub(crate) fn env_create(typ: EnvType) {
         println!("_binary_obj_user_nop_size: {:?}", user_nop_size);
 
         load_icode(env, user_nop_start);
+    }
+
+    env
+}
+
+/// Restores the register values in the Trapframe with the 'iret' instruction.
+/// This exits the kernel and starts executing some environment's code.
+///
+/// This function does not return.
+fn env_pop_tf(tf: &Trapframe) -> ! {
+    unsafe {
+        asm!(
+        "movl $0, %esp; \
+        popal; \
+        popl %es; \
+        popl %ds; \
+        addl $1, %esp; \
+        iret"
+        : : "rmi" (tf), "i" (0x8) : "memory" : "volatile"
+        );
+    }
+
+    panic!("iret failed")
+}
+
+/// Context switch from curenv to env e.
+/// Note: if this is the first call to env_run, curenv is NULL.
+///
+/// This function does not return.
+pub(crate) fn env_run(env: &'static mut Env) -> ! {
+    unsafe {
+        if let Some(cur) = CUR_ENV.as_mut().filter(|e| e.is_running()) {
+            cur.pause();
+        }
+
+        env.resume();
+        CUR_ENV = Some(env);
+        x86::lcr3(env.env_pgdir.paddr().unwrap());
+
+        env_pop_tf(&env.env_tf);
     }
 }
