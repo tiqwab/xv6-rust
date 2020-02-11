@@ -18,6 +18,13 @@ pub(crate) fn outb(port: u16, value: u8) {
 }
 
 #[inline]
+pub(crate) fn rcr3() -> PhysAddr {
+    let value: u32;
+    unsafe { asm!("mov %cr3, $0" : "=r"(value) ::: "volatile") }
+    PhysAddr(value)
+}
+
+#[inline]
 pub(crate) fn lcr3(addr: PhysAddr) {
     unsafe { asm!("mov $0, %cr3" :: "r"(addr.0) : "memory" : "volatile") }
 }

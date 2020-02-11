@@ -23,6 +23,7 @@ mod kclock;
 mod pmap;
 pub mod serial;
 mod trap;
+mod util;
 pub mod vga_buffer;
 pub mod volatile;
 mod x86;

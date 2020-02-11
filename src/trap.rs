@@ -1,5 +1,6 @@
 use crate::constants::*;
 use crate::gdt::consts::*;
+use crate::pmap::VirtAddr;
 
 /// registers as pushed by pusha
 #[repr(C, packed)]
@@ -89,5 +90,9 @@ impl Trapframe {
         tf.tf_cs = (GDT_USER_CODE | 3) as u16;
 
         tf
+    }
+
+    pub(crate) fn set_entry_point(&mut self, va: VirtAddr) {
+        self.tf_eip = va.0 as usize
     }
 }

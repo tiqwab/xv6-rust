@@ -1,9 +1,11 @@
 use alloc::boxed::Box;
 use core::ptr::{null, null_mut};
 
-use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType, Secthdr, SecthdrType, ELF_MAGIC};
+use crate::constants::*;
+use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr};
 use crate::trap::Trapframe;
+use crate::{util, x86};
 
 extern "C" {
     static _binary_obj_user_nop_start: u8;
@@ -138,30 +140,46 @@ fn env_alloc(parent_id: EnvId, typ: EnvType) -> &'static mut Env {
 /// boot/main.c to get ideas.
 ///
 /// Finally, this function maps one page for the program's initial stack.
-fn load_icode(env: &mut Env, binary: *const u8) {
-    // TODO:
-    // - [x] include binary to kernel
-    // - [x] prepare struct for Elf
-    // - [ ] implement load_icode
+unsafe fn load_icode(env: &mut Env, binary: *const u8) {
+    let elf = ElfParser::new(binary).expect("binary is not elf");
 
-    unsafe {
-        // TODO: lcr3()
+    // Change page directory to that of env temporally
+    let kern_pgdir = x86::rcr3();
+    x86::lcr3(
+        env.env_pgdir
+            .paddr()
+            .expect("failed to get a paddr of pgdir"),
+    );
 
-        let elf = {
-            let e = ElfParser::new(binary);
-            e.expect("binary is not elf")
-        };
-
-        for ph in elf.program_headers() {
-            if ph.p_type != ProghdrType::PtLoad {
-                continue;
-            }
-
-            env.env_pgdir
-                .as_mut()
-                .region_alloc(VirtAddr(ph.p_vaddr), ph.p_memsz as usize);
+    for ph in elf.program_headers() {
+        if ph.p_type != ProghdrType::PtLoad {
+            continue;
         }
+
+        let src_va = VirtAddr(binary as u32 + ph.p_offset);
+        let dest_va = VirtAddr(ph.p_vaddr);
+        let memsz = ph.p_memsz as usize;
+        let filesz = ph.p_filesz as usize;
+
+        env.env_pgdir
+            .as_mut()
+            .region_alloc(dest_va, ph.p_memsz as usize);
+
+        util::memcpy(dest_va, src_va, filesz);
+        util::memset(dest_va + filesz, 0, memsz - filesz);
     }
+
+    // Now map one page for the program's initial stack
+    // at virtual address USTACKTOP - PGSIZE.
+    let stack_base = VirtAddr(USTACKTOP - PGSIZE);
+    let stack_size = PGSIZE as usize;
+    env.env_pgdir.region_alloc(stack_base, stack_size);
+
+    // Restore kern page directory
+    x86::lcr3(kern_pgdir);
+
+    // Set trapframe
+    env.env_tf.set_entry_point(elf.entry_point());
 }
 
 /// Allocates a new env with env_alloc, loads the named elf
@@ -183,15 +201,4 @@ pub(crate) fn env_create(typ: EnvType) {
 
         load_icode(env, user_nop_start);
     }
-
-    // void
-    // env_create(uint8_t *binary, enum EnvType type)
-    // {
-    //     struct Env *e;
-    //     if (env_alloc(&e, 0) < 0) {
-    //         panic("failed in env_create");
-    //     }
-    //     e->env_type = type;
-    //     load_icode(e, binary);
-    // }
 }

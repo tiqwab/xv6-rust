@@ -35,11 +35,11 @@ impl VirtAddr {
     }
 
     pub(crate) fn round_up(&self, size: usize) -> VirtAddr {
-        VirtAddr(round_up_u32(self.0, PGSIZE))
+        VirtAddr(round_up_u32(self.0, size as u32))
     }
 
     pub(crate) fn round_down(&self, size: usize) -> VirtAddr {
-        VirtAddr(round_down_u32(self.0, PGSIZE))
+        VirtAddr(round_down_u32(self.0, size as u32))
     }
 }
 
@@ -352,7 +352,6 @@ impl PageDirectory {
     /// Pages should be writable by user and kernel.
     /// Panic if any allocation attempt fails.
     pub(crate) fn region_alloc(&mut self, va: VirtAddr, len: usize) {
-        println!("va: 0x{:x}, len: {}", va.0, len);
         unsafe {
             let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
             let start_va = va.round_down(PGSIZE as usize);
@@ -364,6 +363,24 @@ impl PageDirectory {
                 self.insert(pa, va, PTE_U | PTE_W, allocator);
                 va += PGSIZE;
             }
+        }
+    }
+
+    pub(crate) fn vaddr(&self) -> VirtAddr {
+        VirtAddr(self as *const PageDirectory as u32)
+    }
+
+    pub(crate) fn paddr(&mut self) -> Option<PhysAddr> {
+        self.convert_to_pa(self.vaddr())
+    }
+
+    /// Convert a virtual address to a physical address.
+    /// Return None if there is not page mapping.
+    pub(crate) fn convert_to_pa(&mut self, va: VirtAddr) -> Option<PhysAddr> {
+        unsafe {
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+            self.lookup(va, allocator)
+                .map(|pte| pte.addr() + (va.0 & 0xfff))
         }
     }
 }

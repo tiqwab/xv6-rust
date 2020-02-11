@@ -1,5 +1,6 @@
 // ref. https://pdos.csail.mit.edu/6.828/2018/readings/elf.pdf
 
+use crate::pmap::VirtAddr;
 use core::mem;
 use core::ptr::null;
 
@@ -8,29 +9,6 @@ pub(crate) const ELF_MAGIC: u32 = 0x464c457f;
 pub(crate) struct ElfParser {
     binary: *const u8,
     elf: &'static Elf,
-}
-
-pub(crate) struct ProghdrIter<'a> {
-    ptr: *const u8,
-    hdr: &'a Proghdr,
-    remain: usize,
-}
-
-impl<'a> Iterator for ProghdrIter<'a> {
-    type Item = &'a Proghdr;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.remain <= 0 {
-            None
-        } else {
-            unsafe {
-                let ph = Proghdr::new(self.ptr).expect("unknown ProghdrType");
-                self.hdr = ph;
-                self.remain -= 1;
-                self.ptr = self.ptr.add(mem::size_of::<Proghdr>());
-                Some(self.hdr)
-            }
-        }
-    }
 }
 
 impl ElfParser {
@@ -44,6 +22,10 @@ impl ElfParser {
         let hdr = Proghdr::new(ptr).expect("unknown ProghdrType");
         let remain = self.elf.e_phnum as usize;
         ProghdrIter { ptr, hdr, remain }
+    }
+
+    pub(crate) fn entry_point(&self) -> VirtAddr {
+        VirtAddr(self.elf.e_entry)
     }
 }
 
@@ -101,6 +83,29 @@ impl Proghdr {
         match typ_opt {
             None => None,
             Some(_) => Some(&(*ptr)),
+        }
+    }
+}
+
+pub(crate) struct ProghdrIter<'a> {
+    ptr: *const u8,
+    hdr: &'a Proghdr,
+    remain: usize,
+}
+
+impl<'a> Iterator for ProghdrIter<'a> {
+    type Item = &'a Proghdr;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remain <= 0 {
+            None
+        } else {
+            unsafe {
+                let ph = Proghdr::new(self.ptr).expect("unknown ProghdrType");
+                self.hdr = ph;
+                self.remain -= 1;
+                self.ptr = self.ptr.add(mem::size_of::<Proghdr>());
+                Some(self.hdr)
+            }
         }
     }
 }
