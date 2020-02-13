@@ -1,4 +1,5 @@
 OBJDIR := obj
+KERNDIR := src
 
 # Run 'make V=1' to turn on verbose commands, or 'make V=0' to turn them off.
 ifeq ($(V),1)
@@ -89,6 +90,9 @@ test-image: $(OBJDIR)/boot/boot kernel
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	dd conv=notrunc if=$(KERN_TEST_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
+$(KERNDIR)/vectors.S: vectors.sh
+	./vectors.sh > $@
+
 # `-C link-arg` option can be passed by target json (such as post-link-args field) instead?
 KERN_BINARY_ARGS := $(patsubst %,-C link-arg=%, $(UPROGS))
 KERN_RUSTFLAGS := -Z print-link-args -C link-arg=-b -C link-arg=binary $(KERN_BINARY_ARGS) -C link-arg=-b -C link-arg=default
@@ -97,7 +101,7 @@ KERN_RUSTFLAGS := -Z print-link-args -C link-arg=-b -C link-arg=binary $(KERN_BI
 # '--compress-debug-sections' is temporary fix for 'contains a compressed section, but zlib is not available'
 KERN_CFLAGS := -Wa,--compress-debug-sections=none -Wl,--compress-debug-sections=none
 
-kernel: $(UPROGS)
+kernel: $(UPROGS) $(KERNDIR)/vectors.S
 	@mkdir -p $(OBJDIR)
 	RUSTFLAGS="$(KERN_RUSTFLAGS)" CFLAGS="$(KERN_CFLAGS)" cargo xbuild --target i686-xv6rust.json --verbose
 	$(OBJDUMP) -S $(KERN_BINARY) > $(OBJDIR)/xv6-rust.asm

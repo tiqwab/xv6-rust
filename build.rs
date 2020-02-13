@@ -3,6 +3,7 @@ fn main() {
     cc::Build::new()
         .file("src/entry.S")
         .file("src/entrypgdir.c")
+        .file("src/vectors.S")
         .include("src")
         .compile("foo");
 }
