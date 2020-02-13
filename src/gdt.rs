@@ -3,7 +3,7 @@
 
 use core::ptr::null;
 
-use crate::pmap::VirtAddr;
+use crate::pmap::{PhysAddr, VirtAddr};
 use crate::x86;
 use consts::*;
 
@@ -103,6 +103,92 @@ impl SegDesc {
             access,
             flags_limith: (flags & 0xf0) | (((limit >> 16) & 0xff) as u8 & 0x0f),
             offseth: ((offset >> 24) & 0xff) as u8,
+        }
+    }
+}
+
+#[repr(C, packed)]
+pub(crate) struct TaskState {
+    ts_link: u32,      // Okd ts selector
+    ts_esp0: VirtAddr, // Stack pointers and segment selectors
+    ts_ss0: u16,       // after an increate in privilege level
+    ts_padding1: u16,
+    ts_esp1: VirtAddr,
+    ts_ss1: u16,
+    ts_padding2: u16,
+    ts_esp2: VirtAddr,
+    ts_ss2: u16,
+    ts_padding3: u16,
+    ts_cr3: PhysAddr, // Page directory base
+    ts_eip: VirtAddr, // Saved state from last task switch
+    ts_eflags: u32,
+    ts_eax: u32, // More saved state (registers)
+    ts_ecx: u32,
+    ts_edx: u32,
+    ts_ebx: u32,
+    ts_esp: VirtAddr,
+    ts_ebp: VirtAddr,
+    ts_esi: u32,
+    ts_edi: u32,
+    ts_es: u16, // Even more saved state (segment selectors)
+    ts_padding4: u16,
+    ts_cs: u16,
+    ts_padding5: u16,
+    ts_ss: u16,
+    ts_padding6: u16,
+    ts_ds: u16,
+    ts_padding7: u16,
+    ts_fs: u16,
+    ts_padding8: u16,
+    ts_gs: u16,
+    ts_padding9: u16,
+    ts_ldt: u16,
+    ts_padding10: u16,
+    ts_t: u16,    // Trap on task switch
+    ts_iomb: u16, // I/O map base address
+}
+
+impl TaskState {
+    pub(crate) const fn new() -> TaskState {
+        // Default trait looks useful here, but does not provide a const function.
+        TaskState {
+            ts_link: 0,
+            ts_esp0: VirtAddr(0),
+            ts_ss0: 0,
+            ts_padding1: 0,
+            ts_esp1: VirtAddr(0),
+            ts_ss1: 0,
+            ts_padding2: 0,
+            ts_esp2: VirtAddr(0),
+            ts_ss2: 0,
+            ts_padding3: 0,
+            ts_cr3: PhysAddr(0),
+            ts_eip: VirtAddr(0),
+            ts_eflags: 0,
+            ts_eax: 0,
+            ts_ecx: 0,
+            ts_edx: 0,
+            ts_ebx: 0,
+            ts_esp: VirtAddr(0),
+            ts_ebp: VirtAddr(0),
+            ts_esi: 0,
+            ts_edi: 0,
+            ts_es: 0,
+            ts_padding4: 0,
+            ts_cs: 0,
+            ts_padding5: 0,
+            ts_ss: 0,
+            ts_padding6: 0,
+            ts_ds: 0,
+            ts_padding7: 0,
+            ts_fs: 0,
+            ts_padding8: 0,
+            ts_gs: 0,
+            ts_padding9: 0,
+            ts_ldt: 0,
+            ts_padding10: 0,
+            ts_t: 0,
+            ts_iomb: 0,
         }
     }
 }

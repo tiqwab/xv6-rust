@@ -1,6 +1,9 @@
 use crate::constants::*;
 use crate::gdt::consts::*;
+use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
+
+static mut TS: TaskState = TaskState::new();
 
 /// registers as pushed by pusha
 #[repr(C, packed)]
