@@ -1,7 +1,7 @@
 // This file comes from jos. See COPYRIGHT for copyright information.
 
-#include "../inc/mmu.h"
-#include "../inc/memlayout.h"
+#include <mmu.h>
+#include <memlayout.h>
 
 pte_t entry_pgtable[NPTENTRIES];
 

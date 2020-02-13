@@ -4,7 +4,8 @@ fn main() {
         .file("src/entry.S")
         .file("src/entrypgdir.c")
         .file("src/vectors.S")
-        .include("src")
-        .compile("foo");
+        .file("src/alltraps.S")
+        .include("inc")
+        .compile("xv6rustkernel");
 }
 
