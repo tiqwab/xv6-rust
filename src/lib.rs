@@ -7,6 +7,7 @@
 #![feature(const_in_array_repeat_expressions)]
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(thread_local)]
+#![feature(slice_from_raw_parts)]
 // FIXME: remove later
 #![allow(dead_code)]
 

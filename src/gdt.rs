@@ -49,7 +49,8 @@ pub(crate) mod consts {
                                                  // pub const GDT_F_LONG_MODE: u8 = 1 << 5; // L, 64-bit code segment (IA-32e mode only)
 }
 
-type GlobalDescriptorTable = [SegDesc; 6];
+#[repr(align(16))]
+struct GlobalDescriptorTable([SegDesc; 6]);
 
 /// Global descriptor table.
 ///
@@ -65,7 +66,7 @@ type GlobalDescriptorTable = [SegDesc; 6];
 /// In particular, the last argument to the SEG macro used in the
 /// definition of gdt specifies the Descriptor Privilege Level (DPL)
 /// of that descriptor: 0 for kernel and 3 for user.
-static mut GDT: GlobalDescriptorTable = [
+static mut GDT: GlobalDescriptorTable = GlobalDescriptorTable([
     // NULL
     SegDesc::new(0x0, 0x0, 0x0, 0x0),
     // kernel code segment
@@ -98,7 +99,7 @@ static mut GDT: GlobalDescriptorTable = [
     ),
     // tss, initialized in trap_init_percpu()
     SegDesc::new(0x0, 0x0, 0x0, 0x0),
-];
+]);
 
 #[repr(C, packed)]
 pub(crate) struct SegDesc {
@@ -231,7 +232,7 @@ pub(crate) struct DescriptorTablePointer {
 pub(crate) unsafe fn init_percpu() {
     let gdt_pointer = DescriptorTablePointer {
         limit: (core::mem::size_of::<GlobalDescriptorTable>() - 1) as u16,
-        base: VirtAddr(GDT.as_ptr() as u32).0,
+        base: VirtAddr(&GDT as *const GlobalDescriptorTable as u32).0,
     };
     x86::lgdt(&gdt_pointer);
 
@@ -268,5 +269,5 @@ pub(crate) fn set_tss(ts: &TaskState) {
     let limit = (mem::size_of::<TaskState>() - 1) as u32;
     let access = GDT_A_PRESENT | GDT_A_RING_0 | GDT_A_TSS_AVAIL;
     let flags = GDT_F_PROTECTED_MODE;
-    unsafe { GDT[(GDT_TSS0 >> 3) as usize] = SegDesc::new(offset, limit, access, flags) };
+    unsafe { GDT.0[(GDT_TSS0 >> 3) as usize] = SegDesc::new(offset, limit, access, flags) };
 }

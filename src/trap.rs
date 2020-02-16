@@ -5,33 +5,14 @@ use crate::pmap::VirtAddr;
 use crate::{env, gdt, x86};
 use consts::*;
 use core::mem;
+use core::slice;
 
-static mut IDT: InterruptDescriptorTable = [GateDesc::empty(); 256];
+static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable([GateDesc::empty(); 256]);
 static mut CUR_TS: TaskState = TaskState::empty();
 static mut LAST_TF: Option<Trapframe> = None;
 
 extern "C" {
-    fn vector0();
-    fn vector1();
-    fn vector2();
-    fn vector3();
-    fn vector4();
-    fn vector5();
-    fn vector6();
-    fn vector7();
-    fn vector8();
-    fn vector9();
-    fn vector10();
-    fn vector11();
-    fn vector12();
-    fn vector13();
-    fn vector14();
-    fn vector15();
-    fn vector16();
-    fn vector17();
-    fn vector18();
-
-    fn vector48();
+    static vectors: u32;
 }
 
 pub(crate) mod consts {
@@ -67,7 +48,8 @@ pub(crate) mod consts {
     pub(crate) const STS_TG32: u8 = 0xf; // 32-bit Trap Gate
 }
 
-type InterruptDescriptorTable = [GateDesc; 256];
+#[repr(align(4096))]
+struct InterruptDescriptorTable([GateDesc; 256]);
 
 // #[repr(C, packed)]
 #[repr(C, align(8))]
@@ -215,27 +197,32 @@ impl Trapframe {
 }
 
 pub(crate) unsafe fn trap_init() {
-    IDT[0] = GateDesc::new(false, GDT_KERNEL_CODE, vector0 as *const u8 as u32, 0);
-    IDT[1] = GateDesc::new(false, GDT_KERNEL_CODE, vector1 as *const u8 as u32, 0);
-    IDT[2] = GateDesc::new(false, GDT_KERNEL_CODE, vector2 as *const u8 as u32, 0);
-    IDT[3] = GateDesc::new(true, GDT_KERNEL_CODE, vector3 as *const u8 as u32, 3);
-    IDT[4] = GateDesc::new(true, GDT_KERNEL_CODE, vector4 as *const u8 as u32, 0);
-    IDT[5] = GateDesc::new(false, GDT_KERNEL_CODE, vector5 as *const u8 as u32, 0);
-    IDT[6] = GateDesc::new(false, GDT_KERNEL_CODE, vector6 as *const u8 as u32, 0);
-    IDT[7] = GateDesc::new(false, GDT_KERNEL_CODE, vector7 as *const u8 as u32, 0);
-    IDT[8] = GateDesc::new(false, GDT_KERNEL_CODE, vector8 as *const u8 as u32, 0);
-    IDT[9] = GateDesc::new(false, GDT_KERNEL_CODE, vector9 as *const u8 as u32, 0);
-    IDT[10] = GateDesc::new(false, GDT_KERNEL_CODE, vector10 as *const u8 as u32, 0);
-    IDT[11] = GateDesc::new(false, GDT_KERNEL_CODE, vector11 as *const u8 as u32, 0);
-    IDT[12] = GateDesc::new(false, GDT_KERNEL_CODE, vector12 as *const u8 as u32, 0);
-    IDT[13] = GateDesc::new(false, GDT_KERNEL_CODE, vector13 as *const u8 as u32, 0);
-    IDT[14] = GateDesc::new(false, GDT_KERNEL_CODE, vector14 as *const u8 as u32, 0);
-    IDT[15] = GateDesc::new(false, GDT_KERNEL_CODE, vector15 as *const u8 as u32, 0);
-    IDT[16] = GateDesc::new(false, GDT_KERNEL_CODE, vector16 as *const u8 as u32, 0);
-    IDT[17] = GateDesc::new(false, GDT_KERNEL_CODE, vector17 as *const u8 as u32, 0);
-    IDT[18] = GateDesc::new(false, GDT_KERNEL_CODE, vector18 as *const u8 as u32, 0);
+    let vs = unsafe {
+        let v = &vectors as *const u32;
+        slice::from_raw_parts(v, 256)
+    };
 
-    IDT[48] = GateDesc::new(true, GDT_KERNEL_CODE, vector48 as *const u8 as u32, 3);
+    IDT.0[0] = GateDesc::new(false, GDT_KERNEL_CODE, vs[0], 0);
+    IDT.0[1] = GateDesc::new(false, GDT_KERNEL_CODE, vs[1], 0);
+    IDT.0[2] = GateDesc::new(false, GDT_KERNEL_CODE, vs[2], 0);
+    IDT.0[3] = GateDesc::new(true, GDT_KERNEL_CODE, vs[3], 3);
+    IDT.0[4] = GateDesc::new(true, GDT_KERNEL_CODE, vs[4], 0);
+    IDT.0[5] = GateDesc::new(false, GDT_KERNEL_CODE, vs[5], 0);
+    IDT.0[6] = GateDesc::new(false, GDT_KERNEL_CODE, vs[6], 0);
+    IDT.0[7] = GateDesc::new(false, GDT_KERNEL_CODE, vs[7], 0);
+    IDT.0[8] = GateDesc::new(false, GDT_KERNEL_CODE, vs[8], 0);
+    IDT.0[9] = GateDesc::new(false, GDT_KERNEL_CODE, vs[9], 0);
+    IDT.0[10] = GateDesc::new(false, GDT_KERNEL_CODE, vs[10], 0);
+    IDT.0[11] = GateDesc::new(false, GDT_KERNEL_CODE, vs[11], 0);
+    IDT.0[12] = GateDesc::new(false, GDT_KERNEL_CODE, vs[12], 0);
+    IDT.0[13] = GateDesc::new(false, GDT_KERNEL_CODE, vs[13], 0);
+    IDT.0[14] = GateDesc::new(false, GDT_KERNEL_CODE, vs[14], 0);
+    IDT.0[15] = GateDesc::new(false, GDT_KERNEL_CODE, vs[15], 0);
+    IDT.0[16] = GateDesc::new(false, GDT_KERNEL_CODE, vs[16], 0);
+    IDT.0[17] = GateDesc::new(false, GDT_KERNEL_CODE, vs[17], 0);
+    IDT.0[18] = GateDesc::new(false, GDT_KERNEL_CODE, vs[18], 0);
+
+    IDT.0[48] = GateDesc::new(true, GDT_KERNEL_CODE, vs[48], 3);
 
     trap_init_percpu();
 }
@@ -264,7 +251,7 @@ unsafe fn trap_init_percpu() {
     // Load the IDT
     let idt_pointer = gdt::DescriptorTablePointer {
         limit: (core::mem::size_of::<InterruptDescriptorTable>() - 1) as u16,
-        base: VirtAddr(IDT.as_ptr() as u32).0,
+        base: VirtAddr(&IDT as *const InterruptDescriptorTable as u32).0,
     };
     x86::lidt(&idt_pointer);
 }
@@ -378,7 +365,7 @@ extern "C" fn trap(orig_tf: *const Trapframe) -> ! {
     // Check that interrupts are disabled.  If this assertion
     // fails, DO NOT be tempted to fix it by inserting a "cli" in
     // the interrupt path.
-    assert_ne!(
+    assert_eq!(
         x86::read_eflags() & FL_IF,
         0x0,
         "interrupts should be disabled"

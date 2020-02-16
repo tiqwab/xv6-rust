@@ -622,7 +622,7 @@ pub fn mem_init() {
     kern_pgdir.boot_map_region(
         VirtAddr(KSTACKTOP - KSTKSIZE),
         KSTKSIZE as usize,
-        PhysAddr(unsafe { &bootstack as *const _ as u32 }),
+        VirtAddr(unsafe { &bootstack as *const _ as u32 }).to_pa(),
         PTE_P | PTE_W,
         &mut allocator,
     );
