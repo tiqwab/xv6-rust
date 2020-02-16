@@ -55,3 +55,33 @@ pub(crate) fn lgdt(p: &DescriptorTablePointer) {
 pub(crate) fn lldt(p: &DescriptorTablePointer) {
     unsafe { asm!("lldt ($0)" :: "r"(p) : "memory" : "volatile") }
 }
+
+#[inline]
+pub(crate) fn cld() {
+    // The "cc" clobber indicates that the assembler code modifies the flags register
+    unsafe { asm!("cld" ::: "cc" : "volatile") }
+}
+
+#[inline]
+pub(crate) fn read_eflags() -> u32 {
+    let value: u32;
+    unsafe { asm!("pushfl; popl $0" : "=r" (value) ::: "volatile") }
+    value
+}
+
+#[inline]
+pub(crate) fn rcr2() -> u32 {
+    let value: u32;
+    unsafe { asm!("mov %cr2, $0" : "=r"(value) ::: "volatile") }
+    value
+}
+
+#[inline]
+pub(crate) fn ltr(selector: u16) {
+    unsafe { asm!("ltr $0" :: "r"(selector) :: "volatile") }
+}
+
+#[inline]
+pub(crate) fn lidt(p: &DescriptorTablePointer) {
+    unsafe { asm!("lidt ($0)" :: "r"(p) : : "volatile") }
+}

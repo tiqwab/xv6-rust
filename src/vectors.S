@@ -8,37 +8,37 @@ vector0:
   jmp _alltraps
 .globl vector1
 vector1:
-  pushl $1
+  pushl $0
   pushl $1
   jmp _alltraps
 .globl vector2
 vector2:
-  pushl $2
+  pushl $0
   pushl $2
   jmp _alltraps
 .globl vector3
 vector3:
-  pushl $3
+  pushl $0
   pushl $3
   jmp _alltraps
 .globl vector4
 vector4:
-  pushl $4
+  pushl $0
   pushl $4
   jmp _alltraps
 .globl vector5
 vector5:
-  pushl $5
+  pushl $0
   pushl $5
   jmp _alltraps
 .globl vector6
 vector6:
-  pushl $6
+  pushl $0
   pushl $6
   jmp _alltraps
 .globl vector7
 vector7:
-  pushl $7
+  pushl $0
   pushl $7
   jmp _alltraps
 .globl vector8
@@ -47,7 +47,7 @@ vector8:
   jmp _alltraps
 .globl vector9
 vector9:
-  pushl $9
+  pushl $0
   pushl $9
   jmp _alltraps
 .globl vector10
@@ -72,12 +72,12 @@ vector14:
   jmp _alltraps
 .globl vector15
 vector15:
-  pushl $15
+  pushl $0
   pushl $15
   jmp _alltraps
 .globl vector16
 vector16:
-  pushl $16
+  pushl $0
   pushl $16
   jmp _alltraps
 .globl vector17
@@ -86,1192 +86,1192 @@ vector17:
   jmp _alltraps
 .globl vector18
 vector18:
-  pushl $18
+  pushl $0
   pushl $18
   jmp _alltraps
 .globl vector19
 vector19:
-  pushl $19
+  pushl $0
   pushl $19
   jmp _alltraps
 .globl vector20
 vector20:
-  pushl $20
+  pushl $0
   pushl $20
   jmp _alltraps
 .globl vector21
 vector21:
-  pushl $21
+  pushl $0
   pushl $21
   jmp _alltraps
 .globl vector22
 vector22:
-  pushl $22
+  pushl $0
   pushl $22
   jmp _alltraps
 .globl vector23
 vector23:
-  pushl $23
+  pushl $0
   pushl $23
   jmp _alltraps
 .globl vector24
 vector24:
-  pushl $24
+  pushl $0
   pushl $24
   jmp _alltraps
 .globl vector25
 vector25:
-  pushl $25
+  pushl $0
   pushl $25
   jmp _alltraps
 .globl vector26
 vector26:
-  pushl $26
+  pushl $0
   pushl $26
   jmp _alltraps
 .globl vector27
 vector27:
-  pushl $27
+  pushl $0
   pushl $27
   jmp _alltraps
 .globl vector28
 vector28:
-  pushl $28
+  pushl $0
   pushl $28
   jmp _alltraps
 .globl vector29
 vector29:
-  pushl $29
+  pushl $0
   pushl $29
   jmp _alltraps
 .globl vector30
 vector30:
-  pushl $30
+  pushl $0
   pushl $30
   jmp _alltraps
 .globl vector31
 vector31:
-  pushl $31
+  pushl $0
   pushl $31
   jmp _alltraps
 .globl vector32
 vector32:
-  pushl $32
+  pushl $0
   pushl $32
   jmp _alltraps
 .globl vector33
 vector33:
-  pushl $33
+  pushl $0
   pushl $33
   jmp _alltraps
 .globl vector34
 vector34:
-  pushl $34
+  pushl $0
   pushl $34
   jmp _alltraps
 .globl vector35
 vector35:
-  pushl $35
+  pushl $0
   pushl $35
   jmp _alltraps
 .globl vector36
 vector36:
-  pushl $36
+  pushl $0
   pushl $36
   jmp _alltraps
 .globl vector37
 vector37:
-  pushl $37
+  pushl $0
   pushl $37
   jmp _alltraps
 .globl vector38
 vector38:
-  pushl $38
+  pushl $0
   pushl $38
   jmp _alltraps
 .globl vector39
 vector39:
-  pushl $39
+  pushl $0
   pushl $39
   jmp _alltraps
 .globl vector40
 vector40:
-  pushl $40
+  pushl $0
   pushl $40
   jmp _alltraps
 .globl vector41
 vector41:
-  pushl $41
+  pushl $0
   pushl $41
   jmp _alltraps
 .globl vector42
 vector42:
-  pushl $42
+  pushl $0
   pushl $42
   jmp _alltraps
 .globl vector43
 vector43:
-  pushl $43
+  pushl $0
   pushl $43
   jmp _alltraps
 .globl vector44
 vector44:
-  pushl $44
+  pushl $0
   pushl $44
   jmp _alltraps
 .globl vector45
 vector45:
-  pushl $45
+  pushl $0
   pushl $45
   jmp _alltraps
 .globl vector46
 vector46:
-  pushl $46
+  pushl $0
   pushl $46
   jmp _alltraps
 .globl vector47
 vector47:
-  pushl $47
+  pushl $0
   pushl $47
   jmp _alltraps
 .globl vector48
 vector48:
-  pushl $48
+  pushl $0
   pushl $48
   jmp _alltraps
 .globl vector49
 vector49:
-  pushl $49
+  pushl $0
   pushl $49
   jmp _alltraps
 .globl vector50
 vector50:
-  pushl $50
+  pushl $0
   pushl $50
   jmp _alltraps
 .globl vector51
 vector51:
-  pushl $51
+  pushl $0
   pushl $51
   jmp _alltraps
 .globl vector52
 vector52:
-  pushl $52
+  pushl $0
   pushl $52
   jmp _alltraps
 .globl vector53
 vector53:
-  pushl $53
+  pushl $0
   pushl $53
   jmp _alltraps
 .globl vector54
 vector54:
-  pushl $54
+  pushl $0
   pushl $54
   jmp _alltraps
 .globl vector55
 vector55:
-  pushl $55
+  pushl $0
   pushl $55
   jmp _alltraps
 .globl vector56
 vector56:
-  pushl $56
+  pushl $0
   pushl $56
   jmp _alltraps
 .globl vector57
 vector57:
-  pushl $57
+  pushl $0
   pushl $57
   jmp _alltraps
 .globl vector58
 vector58:
-  pushl $58
+  pushl $0
   pushl $58
   jmp _alltraps
 .globl vector59
 vector59:
-  pushl $59
+  pushl $0
   pushl $59
   jmp _alltraps
 .globl vector60
 vector60:
-  pushl $60
+  pushl $0
   pushl $60
   jmp _alltraps
 .globl vector61
 vector61:
-  pushl $61
+  pushl $0
   pushl $61
   jmp _alltraps
 .globl vector62
 vector62:
-  pushl $62
+  pushl $0
   pushl $62
   jmp _alltraps
 .globl vector63
 vector63:
-  pushl $63
+  pushl $0
   pushl $63
   jmp _alltraps
 .globl vector64
 vector64:
-  pushl $64
+  pushl $0
   pushl $64
   jmp _alltraps
 .globl vector65
 vector65:
-  pushl $65
+  pushl $0
   pushl $65
   jmp _alltraps
 .globl vector66
 vector66:
-  pushl $66
+  pushl $0
   pushl $66
   jmp _alltraps
 .globl vector67
 vector67:
-  pushl $67
+  pushl $0
   pushl $67
   jmp _alltraps
 .globl vector68
 vector68:
-  pushl $68
+  pushl $0
   pushl $68
   jmp _alltraps
 .globl vector69
 vector69:
-  pushl $69
+  pushl $0
   pushl $69
   jmp _alltraps
 .globl vector70
 vector70:
-  pushl $70
+  pushl $0
   pushl $70
   jmp _alltraps
 .globl vector71
 vector71:
-  pushl $71
+  pushl $0
   pushl $71
   jmp _alltraps
 .globl vector72
 vector72:
-  pushl $72
+  pushl $0
   pushl $72
   jmp _alltraps
 .globl vector73
 vector73:
-  pushl $73
+  pushl $0
   pushl $73
   jmp _alltraps
 .globl vector74
 vector74:
-  pushl $74
+  pushl $0
   pushl $74
   jmp _alltraps
 .globl vector75
 vector75:
-  pushl $75
+  pushl $0
   pushl $75
   jmp _alltraps
 .globl vector76
 vector76:
-  pushl $76
+  pushl $0
   pushl $76
   jmp _alltraps
 .globl vector77
 vector77:
-  pushl $77
+  pushl $0
   pushl $77
   jmp _alltraps
 .globl vector78
 vector78:
-  pushl $78
+  pushl $0
   pushl $78
   jmp _alltraps
 .globl vector79
 vector79:
-  pushl $79
+  pushl $0
   pushl $79
   jmp _alltraps
 .globl vector80
 vector80:
-  pushl $80
+  pushl $0
   pushl $80
   jmp _alltraps
 .globl vector81
 vector81:
-  pushl $81
+  pushl $0
   pushl $81
   jmp _alltraps
 .globl vector82
 vector82:
-  pushl $82
+  pushl $0
   pushl $82
   jmp _alltraps
 .globl vector83
 vector83:
-  pushl $83
+  pushl $0
   pushl $83
   jmp _alltraps
 .globl vector84
 vector84:
-  pushl $84
+  pushl $0
   pushl $84
   jmp _alltraps
 .globl vector85
 vector85:
-  pushl $85
+  pushl $0
   pushl $85
   jmp _alltraps
 .globl vector86
 vector86:
-  pushl $86
+  pushl $0
   pushl $86
   jmp _alltraps
 .globl vector87
 vector87:
-  pushl $87
+  pushl $0
   pushl $87
   jmp _alltraps
 .globl vector88
 vector88:
-  pushl $88
+  pushl $0
   pushl $88
   jmp _alltraps
 .globl vector89
 vector89:
-  pushl $89
+  pushl $0
   pushl $89
   jmp _alltraps
 .globl vector90
 vector90:
-  pushl $90
+  pushl $0
   pushl $90
   jmp _alltraps
 .globl vector91
 vector91:
-  pushl $91
+  pushl $0
   pushl $91
   jmp _alltraps
 .globl vector92
 vector92:
-  pushl $92
+  pushl $0
   pushl $92
   jmp _alltraps
 .globl vector93
 vector93:
-  pushl $93
+  pushl $0
   pushl $93
   jmp _alltraps
 .globl vector94
 vector94:
-  pushl $94
+  pushl $0
   pushl $94
   jmp _alltraps
 .globl vector95
 vector95:
-  pushl $95
+  pushl $0
   pushl $95
   jmp _alltraps
 .globl vector96
 vector96:
-  pushl $96
+  pushl $0
   pushl $96
   jmp _alltraps
 .globl vector97
 vector97:
-  pushl $97
+  pushl $0
   pushl $97
   jmp _alltraps
 .globl vector98
 vector98:
-  pushl $98
+  pushl $0
   pushl $98
   jmp _alltraps
 .globl vector99
 vector99:
-  pushl $99
+  pushl $0
   pushl $99
   jmp _alltraps
 .globl vector100
 vector100:
-  pushl $100
+  pushl $0
   pushl $100
   jmp _alltraps
 .globl vector101
 vector101:
-  pushl $101
+  pushl $0
   pushl $101
   jmp _alltraps
 .globl vector102
 vector102:
-  pushl $102
+  pushl $0
   pushl $102
   jmp _alltraps
 .globl vector103
 vector103:
-  pushl $103
+  pushl $0
   pushl $103
   jmp _alltraps
 .globl vector104
 vector104:
-  pushl $104
+  pushl $0
   pushl $104
   jmp _alltraps
 .globl vector105
 vector105:
-  pushl $105
+  pushl $0
   pushl $105
   jmp _alltraps
 .globl vector106
 vector106:
-  pushl $106
+  pushl $0
   pushl $106
   jmp _alltraps
 .globl vector107
 vector107:
-  pushl $107
+  pushl $0
   pushl $107
   jmp _alltraps
 .globl vector108
 vector108:
-  pushl $108
+  pushl $0
   pushl $108
   jmp _alltraps
 .globl vector109
 vector109:
-  pushl $109
+  pushl $0
   pushl $109
   jmp _alltraps
 .globl vector110
 vector110:
-  pushl $110
+  pushl $0
   pushl $110
   jmp _alltraps
 .globl vector111
 vector111:
-  pushl $111
+  pushl $0
   pushl $111
   jmp _alltraps
 .globl vector112
 vector112:
-  pushl $112
+  pushl $0
   pushl $112
   jmp _alltraps
 .globl vector113
 vector113:
-  pushl $113
+  pushl $0
   pushl $113
   jmp _alltraps
 .globl vector114
 vector114:
-  pushl $114
+  pushl $0
   pushl $114
   jmp _alltraps
 .globl vector115
 vector115:
-  pushl $115
+  pushl $0
   pushl $115
   jmp _alltraps
 .globl vector116
 vector116:
-  pushl $116
+  pushl $0
   pushl $116
   jmp _alltraps
 .globl vector117
 vector117:
-  pushl $117
+  pushl $0
   pushl $117
   jmp _alltraps
 .globl vector118
 vector118:
-  pushl $118
+  pushl $0
   pushl $118
   jmp _alltraps
 .globl vector119
 vector119:
-  pushl $119
+  pushl $0
   pushl $119
   jmp _alltraps
 .globl vector120
 vector120:
-  pushl $120
+  pushl $0
   pushl $120
   jmp _alltraps
 .globl vector121
 vector121:
-  pushl $121
+  pushl $0
   pushl $121
   jmp _alltraps
 .globl vector122
 vector122:
-  pushl $122
+  pushl $0
   pushl $122
   jmp _alltraps
 .globl vector123
 vector123:
-  pushl $123
+  pushl $0
   pushl $123
   jmp _alltraps
 .globl vector124
 vector124:
-  pushl $124
+  pushl $0
   pushl $124
   jmp _alltraps
 .globl vector125
 vector125:
-  pushl $125
+  pushl $0
   pushl $125
   jmp _alltraps
 .globl vector126
 vector126:
-  pushl $126
+  pushl $0
   pushl $126
   jmp _alltraps
 .globl vector127
 vector127:
-  pushl $127
+  pushl $0
   pushl $127
   jmp _alltraps
 .globl vector128
 vector128:
-  pushl $128
+  pushl $0
   pushl $128
   jmp _alltraps
 .globl vector129
 vector129:
-  pushl $129
+  pushl $0
   pushl $129
   jmp _alltraps
 .globl vector130
 vector130:
-  pushl $130
+  pushl $0
   pushl $130
   jmp _alltraps
 .globl vector131
 vector131:
-  pushl $131
+  pushl $0
   pushl $131
   jmp _alltraps
 .globl vector132
 vector132:
-  pushl $132
+  pushl $0
   pushl $132
   jmp _alltraps
 .globl vector133
 vector133:
-  pushl $133
+  pushl $0
   pushl $133
   jmp _alltraps
 .globl vector134
 vector134:
-  pushl $134
+  pushl $0
   pushl $134
   jmp _alltraps
 .globl vector135
 vector135:
-  pushl $135
+  pushl $0
   pushl $135
   jmp _alltraps
 .globl vector136
 vector136:
-  pushl $136
+  pushl $0
   pushl $136
   jmp _alltraps
 .globl vector137
 vector137:
-  pushl $137
+  pushl $0
   pushl $137
   jmp _alltraps
 .globl vector138
 vector138:
-  pushl $138
+  pushl $0
   pushl $138
   jmp _alltraps
 .globl vector139
 vector139:
-  pushl $139
+  pushl $0
   pushl $139
   jmp _alltraps
 .globl vector140
 vector140:
-  pushl $140
+  pushl $0
   pushl $140
   jmp _alltraps
 .globl vector141
 vector141:
-  pushl $141
+  pushl $0
   pushl $141
   jmp _alltraps
 .globl vector142
 vector142:
-  pushl $142
+  pushl $0
   pushl $142
   jmp _alltraps
 .globl vector143
 vector143:
-  pushl $143
+  pushl $0
   pushl $143
   jmp _alltraps
 .globl vector144
 vector144:
-  pushl $144
+  pushl $0
   pushl $144
   jmp _alltraps
 .globl vector145
 vector145:
-  pushl $145
+  pushl $0
   pushl $145
   jmp _alltraps
 .globl vector146
 vector146:
-  pushl $146
+  pushl $0
   pushl $146
   jmp _alltraps
 .globl vector147
 vector147:
-  pushl $147
+  pushl $0
   pushl $147
   jmp _alltraps
 .globl vector148
 vector148:
-  pushl $148
+  pushl $0
   pushl $148
   jmp _alltraps
 .globl vector149
 vector149:
-  pushl $149
+  pushl $0
   pushl $149
   jmp _alltraps
 .globl vector150
 vector150:
-  pushl $150
+  pushl $0
   pushl $150
   jmp _alltraps
 .globl vector151
 vector151:
-  pushl $151
+  pushl $0
   pushl $151
   jmp _alltraps
 .globl vector152
 vector152:
-  pushl $152
+  pushl $0
   pushl $152
   jmp _alltraps
 .globl vector153
 vector153:
-  pushl $153
+  pushl $0
   pushl $153
   jmp _alltraps
 .globl vector154
 vector154:
-  pushl $154
+  pushl $0
   pushl $154
   jmp _alltraps
 .globl vector155
 vector155:
-  pushl $155
+  pushl $0
   pushl $155
   jmp _alltraps
 .globl vector156
 vector156:
-  pushl $156
+  pushl $0
   pushl $156
   jmp _alltraps
 .globl vector157
 vector157:
-  pushl $157
+  pushl $0
   pushl $157
   jmp _alltraps
 .globl vector158
 vector158:
-  pushl $158
+  pushl $0
   pushl $158
   jmp _alltraps
 .globl vector159
 vector159:
-  pushl $159
+  pushl $0
   pushl $159
   jmp _alltraps
 .globl vector160
 vector160:
-  pushl $160
+  pushl $0
   pushl $160
   jmp _alltraps
 .globl vector161
 vector161:
-  pushl $161
+  pushl $0
   pushl $161
   jmp _alltraps
 .globl vector162
 vector162:
-  pushl $162
+  pushl $0
   pushl $162
   jmp _alltraps
 .globl vector163
 vector163:
-  pushl $163
+  pushl $0
   pushl $163
   jmp _alltraps
 .globl vector164
 vector164:
-  pushl $164
+  pushl $0
   pushl $164
   jmp _alltraps
 .globl vector165
 vector165:
-  pushl $165
+  pushl $0
   pushl $165
   jmp _alltraps
 .globl vector166
 vector166:
-  pushl $166
+  pushl $0
   pushl $166
   jmp _alltraps
 .globl vector167
 vector167:
-  pushl $167
+  pushl $0
   pushl $167
   jmp _alltraps
 .globl vector168
 vector168:
-  pushl $168
+  pushl $0
   pushl $168
   jmp _alltraps
 .globl vector169
 vector169:
-  pushl $169
+  pushl $0
   pushl $169
   jmp _alltraps
 .globl vector170
 vector170:
-  pushl $170
+  pushl $0
   pushl $170
   jmp _alltraps
 .globl vector171
 vector171:
-  pushl $171
+  pushl $0
   pushl $171
   jmp _alltraps
 .globl vector172
 vector172:
-  pushl $172
+  pushl $0
   pushl $172
   jmp _alltraps
 .globl vector173
 vector173:
-  pushl $173
+  pushl $0
   pushl $173
   jmp _alltraps
 .globl vector174
 vector174:
-  pushl $174
+  pushl $0
   pushl $174
   jmp _alltraps
 .globl vector175
 vector175:
-  pushl $175
+  pushl $0
   pushl $175
   jmp _alltraps
 .globl vector176
 vector176:
-  pushl $176
+  pushl $0
   pushl $176
   jmp _alltraps
 .globl vector177
 vector177:
-  pushl $177
+  pushl $0
   pushl $177
   jmp _alltraps
 .globl vector178
 vector178:
-  pushl $178
+  pushl $0
   pushl $178
   jmp _alltraps
 .globl vector179
 vector179:
-  pushl $179
+  pushl $0
   pushl $179
   jmp _alltraps
 .globl vector180
 vector180:
-  pushl $180
+  pushl $0
   pushl $180
   jmp _alltraps
 .globl vector181
 vector181:
-  pushl $181
+  pushl $0
   pushl $181
   jmp _alltraps
 .globl vector182
 vector182:
-  pushl $182
+  pushl $0
   pushl $182
   jmp _alltraps
 .globl vector183
 vector183:
-  pushl $183
+  pushl $0
   pushl $183
   jmp _alltraps
 .globl vector184
 vector184:
-  pushl $184
+  pushl $0
   pushl $184
   jmp _alltraps
 .globl vector185
 vector185:
-  pushl $185
+  pushl $0
   pushl $185
   jmp _alltraps
 .globl vector186
 vector186:
-  pushl $186
+  pushl $0
   pushl $186
   jmp _alltraps
 .globl vector187
 vector187:
-  pushl $187
+  pushl $0
   pushl $187
   jmp _alltraps
 .globl vector188
 vector188:
-  pushl $188
+  pushl $0
   pushl $188
   jmp _alltraps
 .globl vector189
 vector189:
-  pushl $189
+  pushl $0
   pushl $189
   jmp _alltraps
 .globl vector190
 vector190:
-  pushl $190
+  pushl $0
   pushl $190
   jmp _alltraps
 .globl vector191
 vector191:
-  pushl $191
+  pushl $0
   pushl $191
   jmp _alltraps
 .globl vector192
 vector192:
-  pushl $192
+  pushl $0
   pushl $192
   jmp _alltraps
 .globl vector193
 vector193:
-  pushl $193
+  pushl $0
   pushl $193
   jmp _alltraps
 .globl vector194
 vector194:
-  pushl $194
+  pushl $0
   pushl $194
   jmp _alltraps
 .globl vector195
 vector195:
-  pushl $195
+  pushl $0
   pushl $195
   jmp _alltraps
 .globl vector196
 vector196:
-  pushl $196
+  pushl $0
   pushl $196
   jmp _alltraps
 .globl vector197
 vector197:
-  pushl $197
+  pushl $0
   pushl $197
   jmp _alltraps
 .globl vector198
 vector198:
-  pushl $198
+  pushl $0
   pushl $198
   jmp _alltraps
 .globl vector199
 vector199:
-  pushl $199
+  pushl $0
   pushl $199
   jmp _alltraps
 .globl vector200
 vector200:
-  pushl $200
+  pushl $0
   pushl $200
   jmp _alltraps
 .globl vector201
 vector201:
-  pushl $201
+  pushl $0
   pushl $201
   jmp _alltraps
 .globl vector202
 vector202:
-  pushl $202
+  pushl $0
   pushl $202
   jmp _alltraps
 .globl vector203
 vector203:
-  pushl $203
+  pushl $0
   pushl $203
   jmp _alltraps
 .globl vector204
 vector204:
-  pushl $204
+  pushl $0
   pushl $204
   jmp _alltraps
 .globl vector205
 vector205:
-  pushl $205
+  pushl $0
   pushl $205
   jmp _alltraps
 .globl vector206
 vector206:
-  pushl $206
+  pushl $0
   pushl $206
   jmp _alltraps
 .globl vector207
 vector207:
-  pushl $207
+  pushl $0
   pushl $207
   jmp _alltraps
 .globl vector208
 vector208:
-  pushl $208
+  pushl $0
   pushl $208
   jmp _alltraps
 .globl vector209
 vector209:
-  pushl $209
+  pushl $0
   pushl $209
   jmp _alltraps
 .globl vector210
 vector210:
-  pushl $210
+  pushl $0
   pushl $210
   jmp _alltraps
 .globl vector211
 vector211:
-  pushl $211
+  pushl $0
   pushl $211
   jmp _alltraps
 .globl vector212
 vector212:
-  pushl $212
+  pushl $0
   pushl $212
   jmp _alltraps
 .globl vector213
 vector213:
-  pushl $213
+  pushl $0
   pushl $213
   jmp _alltraps
 .globl vector214
 vector214:
-  pushl $214
+  pushl $0
   pushl $214
   jmp _alltraps
 .globl vector215
 vector215:
-  pushl $215
+  pushl $0
   pushl $215
   jmp _alltraps
 .globl vector216
 vector216:
-  pushl $216
+  pushl $0
   pushl $216
   jmp _alltraps
 .globl vector217
 vector217:
-  pushl $217
+  pushl $0
   pushl $217
   jmp _alltraps
 .globl vector218
 vector218:
-  pushl $218
+  pushl $0
   pushl $218
   jmp _alltraps
 .globl vector219
 vector219:
-  pushl $219
+  pushl $0
   pushl $219
   jmp _alltraps
 .globl vector220
 vector220:
-  pushl $220
+  pushl $0
   pushl $220
   jmp _alltraps
 .globl vector221
 vector221:
-  pushl $221
+  pushl $0
   pushl $221
   jmp _alltraps
 .globl vector222
 vector222:
-  pushl $222
+  pushl $0
   pushl $222
   jmp _alltraps
 .globl vector223
 vector223:
-  pushl $223
+  pushl $0
   pushl $223
   jmp _alltraps
 .globl vector224
 vector224:
-  pushl $224
+  pushl $0
   pushl $224
   jmp _alltraps
 .globl vector225
 vector225:
-  pushl $225
+  pushl $0
   pushl $225
   jmp _alltraps
 .globl vector226
 vector226:
-  pushl $226
+  pushl $0
   pushl $226
   jmp _alltraps
 .globl vector227
 vector227:
-  pushl $227
+  pushl $0
   pushl $227
   jmp _alltraps
 .globl vector228
 vector228:
-  pushl $228
+  pushl $0
   pushl $228
   jmp _alltraps
 .globl vector229
 vector229:
-  pushl $229
+  pushl $0
   pushl $229
   jmp _alltraps
 .globl vector230
 vector230:
-  pushl $230
+  pushl $0
   pushl $230
   jmp _alltraps
 .globl vector231
 vector231:
-  pushl $231
+  pushl $0
   pushl $231
   jmp _alltraps
 .globl vector232
 vector232:
-  pushl $232
+  pushl $0
   pushl $232
   jmp _alltraps
 .globl vector233
 vector233:
-  pushl $233
+  pushl $0
   pushl $233
   jmp _alltraps
 .globl vector234
 vector234:
-  pushl $234
+  pushl $0
   pushl $234
   jmp _alltraps
 .globl vector235
 vector235:
-  pushl $235
+  pushl $0
   pushl $235
   jmp _alltraps
 .globl vector236
 vector236:
-  pushl $236
+  pushl $0
   pushl $236
   jmp _alltraps
 .globl vector237
 vector237:
-  pushl $237
+  pushl $0
   pushl $237
   jmp _alltraps
 .globl vector238
 vector238:
-  pushl $238
+  pushl $0
   pushl $238
   jmp _alltraps
 .globl vector239
 vector239:
-  pushl $239
+  pushl $0
   pushl $239
   jmp _alltraps
 .globl vector240
 vector240:
-  pushl $240
+  pushl $0
   pushl $240
   jmp _alltraps
 .globl vector241
 vector241:
-  pushl $241
+  pushl $0
   pushl $241
   jmp _alltraps
 .globl vector242
 vector242:
-  pushl $242
+  pushl $0
   pushl $242
   jmp _alltraps
 .globl vector243
 vector243:
-  pushl $243
+  pushl $0
   pushl $243
   jmp _alltraps
 .globl vector244
 vector244:
-  pushl $244
+  pushl $0
   pushl $244
   jmp _alltraps
 .globl vector245
 vector245:
-  pushl $245
+  pushl $0
   pushl $245
   jmp _alltraps
 .globl vector246
 vector246:
-  pushl $246
+  pushl $0
   pushl $246
   jmp _alltraps
 .globl vector247
 vector247:
-  pushl $247
+  pushl $0
   pushl $247
   jmp _alltraps
 .globl vector248
 vector248:
-  pushl $248
+  pushl $0
   pushl $248
   jmp _alltraps
 .globl vector249
 vector249:
-  pushl $249
+  pushl $0
   pushl $249
   jmp _alltraps
 .globl vector250
 vector250:
-  pushl $250
+  pushl $0
   pushl $250
   jmp _alltraps
 .globl vector251
 vector251:
-  pushl $251
+  pushl $0
   pushl $251
   jmp _alltraps
 .globl vector252
 vector252:
-  pushl $252
+  pushl $0
   pushl $252
   jmp _alltraps
 .globl vector253
 vector253:
-  pushl $253
+  pushl $0
   pushl $253
   jmp _alltraps
 .globl vector254
 vector254:
-  pushl $254
+  pushl $0
   pushl $254
   jmp _alltraps
 .globl vector255
 vector255:
-  pushl $255
+  pushl $0
   pushl $255
   jmp _alltraps
 

@@ -52,7 +52,7 @@ impl Env {
         self.env_tf.set_entry_point(va);
     }
 
-    fn is_running(&self) -> bool {
+    pub(crate) fn is_running(&self) -> bool {
         self.env_status == EnvStatus::Running
     }
 
@@ -63,6 +63,14 @@ impl Env {
     fn resume(&mut self) {
         self.env_status = EnvStatus::Running;
         self.env_runs += 1;
+    }
+
+    pub(crate) fn get_tf(&self) -> &Trapframe {
+        &self.env_tf
+    }
+
+    pub(crate) fn set_tf(&mut self, tf: &Trapframe) {
+        self.env_tf = tf.clone();
     }
 }
 
@@ -77,6 +85,15 @@ static mut ENV_TABLE: EnvTable = EnvTable {
 static mut NEXT_ENV_ID: u32 = 1;
 
 static mut CUR_ENV: Option<&mut Env> = None;
+
+pub(crate) fn cur_env() -> Option<&'static mut Env> {
+    unsafe {
+        match CUR_ENV.as_mut() {
+            None => None,
+            Some(v) => Some(v),
+        }
+    }
+}
 
 fn generate_env_id() -> EnvId {
     unsafe {
@@ -224,6 +241,18 @@ pub(crate) fn env_create(typ: EnvType) -> &'static mut Env {
     }
 
     env
+}
+
+fn env_free(env: &Env) {
+    unimplemented!()
+}
+
+// Frees an environment.
+pub(crate) fn env_destroy(env: &Env) {
+    env_free(env);
+
+    println!("Destroyed the only environment - nothing more to do!");
+    loop {}
 }
 
 /// Restores the register values in the Trapframe with the 'iret' instruction.

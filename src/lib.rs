@@ -68,7 +68,12 @@ pub fn lib_main() {
         println!("a = {}", *a);
     }
 
-    gdt::init_percpu();
+    unsafe {
+        gdt::init_percpu();
+    }
+    unsafe {
+        trap::trap_init();
+    }
 
     print!("H");
     println!("ello");

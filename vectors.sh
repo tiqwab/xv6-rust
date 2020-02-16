@@ -18,7 +18,7 @@ for i in $(seq 0 255); do
     echo ".globl vector$i"
     echo "vector$i:";
     if [[ !(($i -eq 8) || (($i -ge 10) && ($i -le 14)) || ($i -eq 17)) ]]; then
-        echo "  pushl \$$i"
+        echo "  pushl \$0"
     fi
     echo "  pushl \$$i"
     echo "  jmp _alltraps"
