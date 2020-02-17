@@ -179,9 +179,30 @@ pub(crate) struct PageDirectory {
     entries: [PDE; NPDENTRIES],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
-struct PDX(VirtAddr);
+pub(crate) struct PDX(VirtAddr);
+
+impl PDX {
+    pub(crate) fn new(va: VirtAddr) -> PDX {
+        let aligned_va = va.round_down(PGSIZE as usize);
+        PDX(aligned_va)
+    }
+}
+
+impl Add<u32> for PDX {
+    type Output = ();
+
+    fn add(self, rhs: u32) -> Self::Output {
+        PDX(self.0 + rhs * PGSIZE);
+    }
+}
+
+impl AddAssign<u32> for PDX {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs * PGSIZE;
+    }
+}
 
 impl PageDirectory {
     pub(crate) const fn new() -> PageDirectory {
@@ -230,7 +251,7 @@ impl PageDirectory {
         should_create: bool,
         allocator: &mut PageAllocator,
     ) -> Option<&mut PTE> {
-        let pdx = PDX(va);
+        let pdx = PDX::new(va);
         let pde = &mut self[pdx];
         if !pde.exists() {
             if !should_create {
@@ -383,6 +404,27 @@ impl PageDirectory {
                 .map(|pte| pte.addr() + (va.0 & 0xfff))
         }
     }
+
+    /// Unmaps PDE as well as all PTEs of the page table specified by the PDE.
+    pub(crate) fn remove_pde(&mut self, pdx: PDX) {
+        unsafe {
+            let pde = &self[pdx];
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+
+            let pt = pde.table();
+            for i in 0..NPTENTRIES {
+                let pte = &mut pt[i];
+                if pte.exists() {
+                    let va = VirtAddr((pdx.0).0 | ((i as u32) * PGSIZE));
+                    PageDirectory::remove_pte(va, pte, allocator);
+                }
+            }
+
+            let pde = &mut self[pdx];
+            allocator.decref_pde(pde);
+            pde.clear();
+        }
+    }
 }
 
 impl Index<usize> for PageDirectory {
@@ -430,7 +472,7 @@ impl PDE {
         PDE(0)
     }
 
-    fn exists(&self) -> bool {
+    pub(crate) fn exists(&self) -> bool {
         self.0 & PTE_P == 0x1
     }
 
@@ -441,6 +483,10 @@ impl PDE {
     fn table(&self) -> &mut PageTable {
         let va = PhysAddr(self.0 & 0xfffff000).to_va();
         unsafe { &mut *(va.0 as *mut PageTable) }
+    }
+
+    fn clear(&mut self) {
+        self.0 = 0;
     }
 }
 

@@ -3,7 +3,7 @@ use core::ptr::{null, null_mut};
 
 use crate::constants::*;
 use crate::elf::{ElfParser, ProghdrType};
-use crate::pmap::{PageDirectory, VirtAddr};
+use crate::pmap::{PageDirectory, VirtAddr, PDX};
 use crate::trap::Trapframe;
 use crate::{util, x86};
 
@@ -16,7 +16,7 @@ extern "C" {
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct EnvId(u32);
 
 #[derive(Debug)]
@@ -46,6 +46,14 @@ pub(crate) struct Env {
     // FIXME: what type is better for env_pgdir?
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
 }
+
+impl PartialEq for Env {
+    fn eq(&self, other: &Self) -> bool {
+        self.env_id == other.env_id
+    }
+}
+
+impl Eq for Env {}
 
 impl Env {
     fn set_entry_point(&mut self, va: VirtAddr) {
@@ -243,13 +251,59 @@ pub(crate) fn env_create(typ: EnvType) -> &'static mut Env {
     env
 }
 
-fn env_free(env: &Env) {
-    unimplemented!()
+/// Frees env and all memory it uses.
+unsafe fn env_free(env: &mut Env) {
+    // If freeing the current environment, switch to kern_pgdir
+    // before freeing the page directory, just in case the page
+    // gets reused.
+    if let Some(e) = CUR_ENV.as_mut().filter(|e| e.env_id == env.env_id) {
+        let paddr = e.env_pgdir.paddr().expect("pgdir should be exist");
+        x86::lcr3(paddr);
+    }
+
+    // Note the environment's demise.
+    {
+        let curenv = CUR_ENV.as_ref();
+        let curenv_id = curenv.map(|e| e.env_id.0).unwrap_or(0);
+        println!("[{:08x}] free env {:08x}", curenv_id, env.env_id.0);
+    }
+
+    // Flush all mapped pages in the user portion of the address space
+    assert_eq!(UTOP % (PTSIZE as u32), 0);
+    let start_pdx = PDX::new(VirtAddr(0));
+    let end_pdx = PDX::new(VirtAddr(UTOP));
+    let mut pdx = start_pdx;
+    while pdx < end_pdx {
+        let pde = &env.env_pgdir[pdx];
+        // only look at mapped page tables
+        if pde.exists() {
+            // unmap all PTEs in this page table
+            env.env_pgdir.remove_pde(pdx);
+        }
+        pdx += 1;
+    }
+
+    // free the page directory
+    // The allocation of pgdir is currently managed by rust,
+    // so do nothing here
+
+    // return the environment to the free list
+    env.env_status = EnvStatus::Free;
+    for entry_opt in ENV_TABLE.envs.iter_mut() {
+        match entry_opt {
+            Some(entry) if entry.env_id == env.env_id => {
+                *entry_opt = None;
+            }
+            _ => (),
+        }
+    }
 }
 
 // Frees an environment.
-pub(crate) fn env_destroy(env: &Env) {
-    env_free(env);
+pub(crate) fn env_destroy(env: &mut Env) {
+    unsafe {
+        env_free(env);
+    }
 
     println!("Destroyed the only environment - nothing more to do!");
     loop {}

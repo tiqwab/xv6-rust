@@ -197,7 +197,7 @@ impl Trapframe {
 }
 
 pub(crate) unsafe fn trap_init() {
-    let vs = unsafe {
+    let vs = {
         let v = &vectors as *const u32;
         slice::from_raw_parts(v, 256)
     };
@@ -294,7 +294,7 @@ unsafe fn print_trapframe(tf: &Trapframe) {
     if Some(tf) == LAST_TF.as_ref() && tf.tf_trapno == T_PGFLT {
         println!("  cr2  0x{:08x}", x86::rcr2());
     }
-    println!("  err   0x{:08x}", tf.tf_err);
+    print!("  err   0x{:08x}", tf.tf_err);
     // For page faults, print decoded fault error code:
     // U/K = fault occurred in user/kernel mode
     // W/R = a write/read caused the fault
