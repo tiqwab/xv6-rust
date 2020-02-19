@@ -18,6 +18,7 @@ OBJCOPY := objcopy
 DD := dd
 CP := cp
 NM := nm
+AR := ar
 QEMU := qemu-system-i386
 GDB := gdb
 
@@ -40,7 +41,6 @@ CFLAGS += -fno-tree-ch
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
 
 BOOT_CFLAGS := $(CFLAGS) -gstabs
-USER_CFLAGS := $(CFLAGS) -gstabs
 
 # Common linker flags
 LDFLAGS := -m elf_i386

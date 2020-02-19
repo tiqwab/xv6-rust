@@ -1,6 +1,10 @@
 UPROGS += \
-	$(OBJDIR)/user/nop
+	$(OBJDIR)/user/nop \
+	$(OBJDIR)/user/hello
 
+include user/lib/module.mk
+
+USER_CFLAGS := $(CFLAGS) -gstabs
 UENTRYOBJ := $(OBJDIR)/user/entry.o
 
 $(UENTRYOBJ): user/entry.S
@@ -13,9 +17,9 @@ $(OBJDIR)/user/%.o: user/%.c
 	@mkdir -p $(@D)
 	$(V)$(CC) -nostdinc $(USER_CFLAGS) -c -o $@ $<
 
-$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(UENTRYOBJ) user/user.ld
+$(OBJDIR)/user/%: $(OBJDIR)/user/%.o $(USER_LIB_ARCHIVE) $(UENTRYOBJ) user/user.ld
 	@echo + ld $@
 	# $(V)$(LD) -o $@ -T user/user.ld $(LDFLAGS) -nostdlib $(OBJDIR)/lib/entry.o $@.o -L$(OBJDIR)/lib $(USERLIBS:%=-l%) $(GCC_LIB)
-	$(V)$(LD) -o $@ -T user/user.ld $(LDFLAGS) -nostdlib $< $(UENTRYOBJ)
+	$(V)$(LD) -o $@ -T user/user.ld $(LDFLAGS) -nostdlib $< $(UENTRYOBJ) $(USER_LIB_ARCHIVE)
 	$(V)$(OBJDUMP) -S $@ > $@.asm
 	$(V)$(NM) -n $@ > $@.sym

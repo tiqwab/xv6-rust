@@ -2,6 +2,7 @@ use crate::constants::*;
 use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
+use crate::syscall;
 use crate::{env, gdt, x86};
 use consts::*;
 use core::mem;
@@ -333,12 +334,22 @@ unsafe fn print_regs(regs: &PushRegs) {
     println!("  eax   0x{:08x}", regs.reg_eax);
 }
 
-fn trap_dispatch(tf: &Trapframe) {
+fn trap_dispatch(tf: &mut Trapframe) {
     // Handle processor exceptions.
     match tf.tf_trapno {
         T_PGFLT => unimplemented!(),
         T_BRKPT => unimplemented!(),
-        T_SYSCALL => unimplemented!(),
+        T_SYSCALL => unsafe {
+            let ret = syscall::syscall(
+                tf.tf_regs.reg_eax,
+                tf.tf_regs.reg_edx,
+                tf.tf_regs.reg_ecx,
+                tf.tf_regs.reg_ebx,
+                tf.tf_regs.reg_edi,
+                tf.tf_regs.reg_esi,
+            );
+            tf.tf_regs.reg_eax = ret as u32;
+        },
         _ => {
             // Unexpected trap: The user process or the kernel has a bug.
             unsafe {
@@ -355,8 +366,8 @@ fn trap_dispatch(tf: &Trapframe) {
 }
 
 #[no_mangle]
-extern "C" fn trap(orig_tf: *const Trapframe) -> ! {
-    let mut tf = unsafe { orig_tf.as_ref().unwrap() };
+extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
+    let mut tf = unsafe { orig_tf.as_mut().unwrap() };
 
     // The environment may have set DF and some versions
     // of GCC rely on DF being clear
@@ -383,7 +394,7 @@ extern "C" fn trap(orig_tf: *const Trapframe) -> ! {
         curenv.set_tf(tf);
 
         // The trapframe on the stack should be ignored from here on.
-        tf = curenv.get_tf();
+        tf = curenv.get_tf_mut();
     }
 
     // Record that tf is the last real trapframe so

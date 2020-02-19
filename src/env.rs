@@ -11,6 +11,9 @@ extern "C" {
     static _binary_obj_user_nop_start: u8;
     static _binary_obj_user_nop_end: u8;
     static _binary_obj_user_nop_size: usize;
+    static _binary_obj_user_hello_start: u8;
+    static _binary_obj_user_hello_end: u8;
+    static _binary_obj_user_hello_size: usize;
 }
 
 const LOG2ENV: u32 = 10;
@@ -75,6 +78,10 @@ impl Env {
 
     pub(crate) fn get_tf(&self) -> &Trapframe {
         &self.env_tf
+    }
+
+    pub(crate) fn get_tf_mut(&mut self) -> &mut Trapframe {
+        &mut self.env_tf
     }
 
     pub(crate) fn set_tf(&mut self, tf: &Trapframe) {
@@ -237,13 +244,13 @@ pub(crate) fn env_create(typ: EnvType) -> &'static mut Env {
     let env = env_alloc(EnvId(0), typ);
 
     unsafe {
-        let user_nop_start = &_binary_obj_user_nop_start as *const u8;
-        let user_nop_end = &_binary_obj_user_nop_end as *const u8;
-        let user_nop_size = &_binary_obj_user_nop_size as *const usize;
+        let user_nop_start = &_binary_obj_user_hello_start as *const u8;
+        let user_nop_end = &_binary_obj_user_hello_end as *const u8;
+        let user_nop_size = &_binary_obj_user_hello_size as *const usize;
 
-        println!("_binary_obj_user_nop_start: {:?}", user_nop_start);
-        println!("_binary_obj_user_nop_end: {:?}", user_nop_end);
-        println!("_binary_obj_user_nop_size: {:?}", user_nop_size);
+        println!("_binary_obj_user_hello_start: {:?}", user_nop_start);
+        println!("_binary_obj_user_hello_end: {:?}", user_nop_end);
+        println!("_binary_obj_user_hello_size: {:?}", user_nop_size);
 
         load_icode(env, user_nop_start);
     }

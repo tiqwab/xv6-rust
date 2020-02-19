@@ -23,6 +23,7 @@ mod gdt;
 mod kclock;
 mod pmap;
 pub mod serial;
+mod syscall;
 mod trap;
 mod util;
 pub mod vga_buffer;
