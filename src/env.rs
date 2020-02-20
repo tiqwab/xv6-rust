@@ -6,6 +6,8 @@ use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
 use crate::trap::Trapframe;
 use crate::{util, x86};
+use core::fmt;
+use core::fmt::{Error, Formatter};
 
 extern "C" {
     static _binary_obj_user_nop_start: u8;
@@ -20,7 +22,14 @@ const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
 
 #[derive(Debug, PartialEq, Eq)]
-struct EnvId(u32);
+pub(crate) struct EnvId(u32);
+
+impl fmt::LowerHex for EnvId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        let val = self.0;
+        fmt::LowerHex::fmt(&val, f)
+    }
+}
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -86,6 +95,10 @@ impl Env {
 
     pub(crate) fn set_tf(&mut self, tf: &Trapframe) {
         self.env_tf = tf.clone();
+    }
+
+    pub(crate) fn get_env_id(&self) -> &EnvId {
+        &self.env_id
     }
 }
 
@@ -272,7 +285,7 @@ unsafe fn env_free(env: &mut Env) {
     {
         let curenv = CUR_ENV.as_ref();
         let curenv_id = curenv.map(|e| e.env_id.0).unwrap_or(0);
-        println!("[{:08x}] free env {:08x}", curenv_id, env.env_id.0);
+        println!("[{:08x}] free env {:08x}", curenv_id, env.env_id);
     }
 
     // Flush all mapped pages in the user portion of the address space
@@ -363,7 +376,7 @@ pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32
     if let Err(addr) = env.env_pgdir.user_mem_check(va, len, perm | PTE_U) {
         println!(
             "[{:08x}] user_mem_check assertion failure for va {:08x}",
-            env.env_id.0, addr.0
+            env.env_id, addr.0
         );
         env_destroy(env);
     }

@@ -6,6 +6,7 @@ USER_LIB_SRCS := \
 	user/lib/printf.c \
 	user/lib/strlen.c \
 	user/lib/syscall.c \
+	user/lib/exit.c \
 
 USER_LIB_OBJS := $(patsubst user/lib/%.c, $(OBJDIR)/user/lib/%.o, $(USER_LIB_SRCS))
 

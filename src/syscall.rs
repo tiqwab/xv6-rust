@@ -8,6 +8,8 @@ use core::str;
 
 mod consts {
     pub(crate) static SYS_CPUTS: u32 = 0;
+    pub(crate) static SYS_GETC: u32 = 1;
+    pub(crate) static SYS_EXIT: u32 = 2;
 }
 
 fn sys_cputs(s: &str) {
@@ -35,6 +37,12 @@ pub(crate) unsafe fn syscall(
             str::from_utf8(utf8s).expect("illegal utf8 string")
         };
         sys_cputs(s);
+        0
+    } else if syscall_no == SYS_EXIT {
+        let _status = a1 as i32;
+        let curenv = env::cur_env().expect("curenv should be exist");
+        println!("[{:08x}] exiting gracefully", curenv.get_env_id());
+        env::env_destroy(curenv);
         0
     } else {
         panic!("unknown syscall");

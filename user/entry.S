@@ -22,5 +22,5 @@ _start:
 args_exist:
 	# call libmain
 	call umain
+    call exit
 1:	jmp 1b
-

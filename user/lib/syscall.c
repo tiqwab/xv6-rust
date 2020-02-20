@@ -7,6 +7,8 @@
 
 // TODO: share with kernel
 #define SYS_CPUTS 0
+#define SYS_GETC 1
+#define SYS_EXIT 2
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -38,4 +40,8 @@ static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
 
 void sys_cputs(const char *s, int len) {
     syscall(SYS_CPUTS, (int) s, len, 0, 0, 0);
+}
+
+void sys_exit(int status) {
+    syscall(SYS_EXIT, status, 0, 0, 0, 0);
 }
