@@ -1,22 +1,26 @@
 use core::mem;
-use core::ops::{Add, Index, IndexMut, Sub};
+use core::ops::{Add, AddAssign, Index, IndexMut, Sub};
 use core::ptr::{null, null_mut};
 
 use crate::constants::*;
 use crate::kclock;
 use crate::x86;
+use alloc::boxed::Box;
 
 extern "C" {
     static end: u32;
     static bootstack: u32;
 }
 
-#[derive(Debug, Clone, Copy)]
+static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
+static mut PAGE_ALLOCATOR: Option<PageAllocator> = None;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VirtAddr(pub(crate) u32);
 
 impl VirtAddr {
     /// VirtualAddr in kernel can be converted into PhysAddr.
-    fn to_pa(&self) -> PhysAddr {
+    pub(crate) fn to_pa(&self) -> PhysAddr {
         if self.0 < KERN_BASE {
             panic!(
                 "cannot convert virtual address 0x{:x} to physical address",
@@ -28,6 +32,14 @@ impl VirtAddr {
 
     fn is_aligned(&self) -> bool {
         self.0 % PGSIZE == 0
+    }
+
+    pub(crate) fn round_up(&self, size: usize) -> VirtAddr {
+        VirtAddr(round_up_u32(self.0, size as u32))
+    }
+
+    pub(crate) fn round_down(&self, size: usize) -> VirtAddr {
+        VirtAddr(round_down_u32(self.0, size as u32))
     }
 }
 
@@ -47,6 +59,18 @@ impl Add<usize> for VirtAddr {
     }
 }
 
+impl AddAssign<u32> for VirtAddr {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs;
+    }
+}
+
+impl AddAssign<usize> for VirtAddr {
+    fn add_assign(&mut self, rhs: usize) {
+        self.0 += rhs as u32;
+    }
+}
+
 impl Sub<u32> for VirtAddr {
     type Output = VirtAddr;
 
@@ -63,7 +87,7 @@ impl Sub<usize> for VirtAddr {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PhysAddr(pub(crate) u32);
 
 impl PhysAddr {
@@ -137,12 +161,12 @@ impl BootAllocator {
     fn alloc(&mut self, n: u32) -> VirtAddr {
         match self.next_free.take() {
             None => {
-                let next = round_up_va(self.bss_end, PGSIZE);
-                self.next_free = Some(round_up_va(next + n, PGSIZE));
+                let next = self.bss_end.round_up(PGSIZE as usize);
+                self.next_free = Some((next + n).round_up(PGSIZE as usize));
                 next
             }
             Some(next) => {
-                self.next_free = Some(round_up_va(next + n, PGSIZE));
+                self.next_free = Some((next + n).round_up(PGSIZE as usize));
                 next
             }
         }
@@ -151,15 +175,57 @@ impl BootAllocator {
 
 #[repr(align(4096))]
 #[repr(C)]
-struct PageDirectory {
+pub(crate) struct PageDirectory {
     entries: [PDE; NPDENTRIES],
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(C)]
-struct PDX(VirtAddr);
+pub(crate) struct PDX(VirtAddr);
+
+impl PDX {
+    pub(crate) fn new(va: VirtAddr) -> PDX {
+        let aligned_va = va.round_down(PGSIZE as usize);
+        PDX(aligned_va)
+    }
+}
+
+impl Add<u32> for PDX {
+    type Output = ();
+
+    fn add(self, rhs: u32) -> Self::Output {
+        PDX(self.0 + rhs * PGSIZE);
+    }
+}
+
+impl AddAssign<u32> for PDX {
+    fn add_assign(&mut self, rhs: u32) {
+        self.0 += rhs * PGSIZE;
+    }
+}
 
 impl PageDirectory {
+    pub(crate) const fn new() -> PageDirectory {
+        PageDirectory {
+            entries: [PDE::empty(); NPDENTRIES],
+        }
+    }
+
+    pub(crate) fn new_for_user() -> Box<PageDirectory> {
+        let mut pgdir = PageDirectory::new();
+        unsafe {
+            let kern_pgdir = KERN_PGDIR.as_ref().expect("KERN_PGDIR is not initialized");
+            // Copy kernel mapping
+            for (i, kern_pde) in kern_pgdir.entries.iter().enumerate() {
+                if kern_pde.exists() {
+                    let pde = PDE(kern_pde.0);
+                    pgdir.entries[i] = pde;
+                }
+            }
+        }
+        Box::new(pgdir)
+    }
+
     fn get(&mut self, pdx: PDX) -> Option<&mut PDE> {
         if self[pdx].exists() {
             Some(&mut self[pdx])
@@ -185,13 +251,13 @@ impl PageDirectory {
         should_create: bool,
         allocator: &mut PageAllocator,
     ) -> Option<&mut PTE> {
-        let pdx = PDX(va);
+        let pdx = PDX::new(va);
         let pde = &mut self[pdx];
         if !pde.exists() {
             if !should_create {
                 return None;
             }
-            let pa = allocator.alloc(AllocFlag::AllocZero).unwrap();
+            let pa = allocator.alloc(AllocFlag::AllocZero).expect("alloc failed");
             pde.set(pa, PTE_U | PTE_P | PTE_W);
             allocator.incref_pde(pde);
         }
@@ -227,7 +293,7 @@ impl PageDirectory {
             let pa = start_pa + i * (PGSIZE as usize);
             let pte = self.walk(va, true, allocator).unwrap();
             pte.set(pa, perm | PTE_P);
-            // println!("0x{:x}", pte.0);
+            // println!("va: 0x{:x}, pte: 0x{:x}", va.0, pte.0);
         }
     }
 
@@ -300,6 +366,107 @@ impl PageDirectory {
         }
         old_pte.set(new_pte.addr(), new_pte.attr());
     }
+
+    /// Allocate len bytes of physical memory for environment env,
+    /// and map it at virtual address va in the environment's address space.
+    /// Does not zero or otherwise initialize the mapped pages in any way.
+    /// Pages should be writable by user and kernel.
+    /// Panic if any allocation attempt fails.
+    pub(crate) fn region_alloc(&mut self, va: VirtAddr, len: usize) {
+        unsafe {
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+            let start_va = va.round_down(PGSIZE as usize);
+            let end_va = va.add(len).round_up(PGSIZE as usize);
+
+            let mut va = start_va;
+            while va < end_va {
+                let pa = allocator.alloc(AllocFlag::None).unwrap();
+                self.insert(pa, va, PTE_U | PTE_W, allocator);
+                va += PGSIZE;
+            }
+        }
+    }
+
+    pub(crate) fn vaddr(&self) -> VirtAddr {
+        VirtAddr(self as *const PageDirectory as u32)
+    }
+
+    pub(crate) fn paddr(&mut self) -> Option<PhysAddr> {
+        self.convert_to_pa(self.vaddr())
+    }
+
+    /// Convert a virtual address to a physical address.
+    /// Return None if there is not page mapping.
+    pub(crate) fn convert_to_pa(&mut self, va: VirtAddr) -> Option<PhysAddr> {
+        unsafe {
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+            self.lookup(va, allocator)
+                .map(|pte| pte.addr() + (va.0 & 0xfff))
+        }
+    }
+
+    /// Unmaps PDE as well as all PTEs of the page table specified by the PDE.
+    pub(crate) fn remove_pde(&mut self, pdx: PDX) {
+        unsafe {
+            let pde = &self[pdx];
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+
+            let pt = pde.table();
+            for i in 0..NPTENTRIES {
+                let pte = &mut pt[i];
+                if pte.exists() {
+                    let va = VirtAddr((pdx.0).0 | ((i as u32) * PGSIZE));
+                    PageDirectory::remove_pte(va, pte, allocator);
+                }
+            }
+
+            let pde = &mut self[pdx];
+            allocator.decref_pde(pde);
+            pde.clear();
+        }
+    }
+
+    /// Check that an environment is allowed to access the range of memory
+    /// [va, va+len) with permissions 'perm | PTE_P'.
+    /// Normally 'perm' will contain PTE_U at least, but this is not required.
+    /// 'va' and 'len' need not be page-aligned; you must test every page that
+    /// contains any of that range.  You will test either 'len/PGSIZE',
+    /// 'len/PGSIZE + 1', or 'len/PGSIZE + 2' pages.
+    ///
+    /// A user program can access a virtual address if (1) the address is below
+    /// ULIM, and (2) the page table gives it permission.  These are exactly
+    /// the tests you should implement here.
+    ///
+    /// If there is an error, Return Err(addr), which is the first erroneous virtual address.
+    /// Returns Ok if the user program can access this range of addresses.
+    pub(crate) fn user_mem_check(
+        &mut self,
+        orig_va: VirtAddr,
+        orig_len: usize,
+        perm: u32,
+    ) -> Result<(), VirtAddr> {
+        unsafe {
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+            let start_va = orig_va.round_down(PGSIZE as usize);
+            let end_va = (orig_va + orig_len).round_up(PGSIZE as usize);
+
+            let mut va = start_va;
+            while va < end_va {
+                if va > VirtAddr(ULIM) {
+                    return Err(va);
+                }
+                let pte_opt = self.walk(va, false, allocator);
+                match pte_opt {
+                    None => return Err(va),
+                    Some(pte) if pte.attr() & perm != perm => return Err(va),
+                    _ => (),
+                }
+                va += PGSIZE;
+            }
+
+            return Ok(());
+        }
+    }
 }
 
 impl Index<usize> for PageDirectory {
@@ -334,7 +501,7 @@ impl IndexMut<PDX> for PageDirectory {
 
 #[derive(Debug)]
 #[repr(C)]
-struct PDE(u32);
+pub(crate) struct PDE(u32);
 
 impl PDE {
     fn new(pa: PhysAddr, attr: u32) -> PDE {
@@ -343,7 +510,11 @@ impl PDE {
         pde
     }
 
-    fn exists(&self) -> bool {
+    const fn empty() -> PDE {
+        PDE(0)
+    }
+
+    pub(crate) fn exists(&self) -> bool {
         self.0 & PTE_P == 0x1
     }
 
@@ -354,6 +525,10 @@ impl PDE {
     fn table(&self) -> &mut PageTable {
         let va = PhysAddr(self.0 & 0xfffff000).to_va();
         unsafe { &mut *(va.0 as *mut PageTable) }
+    }
+
+    fn clear(&mut self) {
+        self.0 = 0;
     }
 }
 
@@ -433,8 +608,8 @@ fn round_up_u32(x: u32, base: u32) -> u32 {
     ((x - 1 + base) / base) * base
 }
 
-fn round_up_va(x: VirtAddr, base: u32) -> VirtAddr {
-    VirtAddr(round_up_u32(x.0, base))
+fn round_down_u32(x: u32, base: u32) -> u32 {
+    (x / base) * base
 }
 
 fn nvram_read(reg: u8) -> u16 {
@@ -483,21 +658,9 @@ pub fn mem_init() {
     let bss_end = VirtAddr(unsafe { &end as *const _ as u32 });
     let mut boot_allocator = BootAllocator::new(bss_end);
     let kern_pgdir_va = boot_allocator.alloc(PGSIZE);
+    let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
     println!("kern_pgdir: 0x{:x}", kern_pgdir_va.0);
     // memset(kern_pgdir, 0, PGSIZE);
-
-    // Recursively insert PD in itself as a page table, to form
-    // a virtual page table at virtual address UVPT.
-    // Permissions: kernel R, user R
-    let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
-    let uvpt = VirtAddr(UVPT);
-    let entry = PDE::new(kern_pgdir_va.to_pa(), PTE_P | PTE_U);
-    let index = PDX(uvpt);
-    kern_pgdir[index] = entry;
-    println!(
-        "&kern_pgdir[PDX(uvpt)](0x{:?}): 0x{:x}",
-        &kern_pgdir[index] as *const PDE, kern_pgdir[index].0
-    );
 
     // Allocate an array of npages 'struct PageInfo's and store it in 'pages'.
     // The kernel uses this array to keep track of physical pages: for
@@ -506,6 +669,12 @@ pub fn mem_init() {
     // to initialize all fields of each struct PageInfo to 0.
     let page_info_size = mem::size_of::<PageInfo>();
     let pages = boot_allocator.alloc(npages * page_info_size as u32).0 as *mut PageInfo;
+
+    // Allocate kernel heap
+    println!("before: 0x{:x}", boot_allocator.alloc(0).0);
+    let kheap = boot_allocator.alloc(KHEAP_SIZE as u32).0 as *mut PageInfo;
+    println!("kheap: {:?}", kheap);
+    println!("after: 0x{:x}", boot_allocator.alloc(0).0);
 
     // Now that we've allocated the initial kernel data structures, we set
     // up the list of free physical pages. Once we've done so, all further
@@ -517,23 +686,15 @@ pub fn mem_init() {
 
     println!("page_free_list: 0x{:?}", allocator.page_free_list);
 
-    let x = kern_pgdir.walk(VirtAddr(0x00001000), false, &mut allocator);
-    println!("pte: {:?}", x);
-    let x = kern_pgdir.walk(VirtAddr(0x00001000), true, &mut allocator);
-    println!("pte: {:?}", x);
-
     // Now we set up virtual memory
 
-    // Map 'pages' read-only by the user at linear address UPAGES
-    // Permissions:
-    //    - the new image at UPAGES -- kernel R, user R
-    //      (ie. perm = PTE_U | PTE_P)
-    //    - pages itself -- kernel RW, user NONE
+    // Map kernel heap
+    // This mapping is not in neither xv6 nor jos.
     kern_pgdir.boot_map_region(
-        VirtAddr(UPAGES),
-        round_up_u32(npages * (page_info_size as u32), PGSIZE) as usize,
-        VirtAddr(pages as u32).to_pa(),
-        PTE_U | PTE_P,
+        VirtAddr(KHEAP_BASE),
+        KHEAP_SIZE,
+        VirtAddr(kheap as u32).to_pa(),
+        PTE_P | PTE_W,
         &mut allocator,
     );
 
@@ -549,7 +710,7 @@ pub fn mem_init() {
     kern_pgdir.boot_map_region(
         VirtAddr(KSTACKTOP - KSTKSIZE),
         KSTKSIZE as usize,
-        PhysAddr(unsafe { &bootstack as *const _ as u32 }),
+        VirtAddr(unsafe { &bootstack as *const _ as u32 }).to_pa(),
         PTE_P | PTE_W,
         &mut allocator,
     );
@@ -606,6 +767,11 @@ pub fn mem_init() {
     if x.is_some() {
         panic!("should be none");
     }
+
+    unsafe {
+        KERN_PGDIR = Some(kern_pgdir);
+        PAGE_ALLOCATOR = Some(allocator);
+    }
 }
 
 // --------------------------------------------------------------
@@ -660,11 +826,19 @@ impl PageAllocator {
             if i == 0 {
                 continue;
             }
+
+            // i == 7, 8 (around 0x7c00 as physical address) is used by boot loader,
+            // but it is no longer required
+            // if i == 7 || i == 8 {
+            //     continue;
+            // }
+
             // already used in kernel
             if i >= npages_basemem && i < first_free_page {
                 continue;
             }
             let page = unsafe { &mut *(self.pages.add(i as usize)) };
+            // println!("page[{}]: {:?}", i, page);
             page.pp_ref = 0;
             page.pp_link = self.page_free_list;
             self.page_free_list = page as *mut PageInfo;

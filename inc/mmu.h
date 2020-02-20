@@ -133,7 +133,7 @@
  *
  */
 
-#ifdef __ASSEMBLER__
+#ifdef _XV6RUST_ASM
 
 /*
  * Macros to build GDT entries in assembly.
@@ -146,11 +146,11 @@
 	.byte (((base) >> 16) & 0xff), (0x90 | (type)),		\
 		(0xC0 | (((lim) >> 28) & 0xf)), (((base) >> 24) & 0xff)
 
-#else	// not __ASSEMBLER__
+#else	// not _XV6RUST_ASM
 
 // remove definitions from the original file
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !_XV6RUST_ASM */
 
 // Application segment type bits
 #define STA_X		0x8	    // Executable segment
@@ -181,10 +181,10 @@
  *
  */
 
-#ifndef __ASSEMBLER__
+#ifndef _XV6RUST_ASM
 
 // remove definitions from the original file
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !_XV6RUST_ASM */
 
 #endif /* !_XV6RUST_MMU_H */

@@ -3,7 +3,9 @@ fn main() {
     cc::Build::new()
         .file("src/entry.S")
         .file("src/entrypgdir.c")
-        .include("src")
-        .compile("foo");
+        .file("src/vectors.S")
+        .file("src/alltraps.S")
+        .include("inc")
+        .compile("xv6rustkernel");
 }
 

@@ -3,10 +3,11 @@
 #ifndef _XV6RUST_MEMLAYOUT_H
 #define _XV6RUST_MEMLAYOUT_H
 
-#ifndef __ASSEMBLER__
-#include "../inc/types.h"
 #include "../inc/mmu.h"
-#endif /* not __ASSEMBLER__ */
+
+#ifndef _XV6RUST_ASM
+#include "../inc/types.h"
+#endif /* _XV6RUST_ASM */
 
 /*
  * This file contains definitions for memory management in our OS,
@@ -140,10 +141,10 @@
 // The location of the user-level STABS data structure
 #define USTABDATA	(PTSIZE / 2)
 
-#ifndef __ASSEMBLER__
+#ifndef _XV6RUST_ASM
 
 typedef uint32_t pte_t;
 typedef uint32_t pde_t;
 
-#endif /* !__ASSEMBLER__ */
-#endif /* !XV6RUST_MEMLAYOUT_H */
+#endif /* !_XV6RUST_ASM */
+#endif /* !_XV6RUST_MEMLAYOUT_H */
