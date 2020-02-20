@@ -353,3 +353,18 @@ pub(crate) fn env_run(env: &'static mut Env) -> ! {
         env_pop_tf(&env.env_tf);
     }
 }
+
+/// Checks that environment 'env' is allowed to access the range
+/// of memory [va, va+len) with permissions 'perm | PTE_U | PTE_P'.
+/// If it can, then the function simply returns.
+/// If it cannot, 'env' is destroyed and, if env is the current
+/// environment, this function will not return.
+pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32) {
+    if let Err(addr) = env.env_pgdir.user_mem_check(va, len, perm | PTE_U) {
+        println!(
+            "[{:08x}] user_mem_check assertion failure for va {:08x}",
+            env.env_id.0, addr.0
+        );
+        env_destroy(env);
+    }
+}

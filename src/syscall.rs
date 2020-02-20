@@ -1,15 +1,13 @@
 // This file comes from kern/syscall.c in jos. See COPYRIGHT for copyright information.
 
+use crate::env;
+use crate::pmap::VirtAddr;
 use consts::*;
 use core::slice;
 use core::str;
 
 mod consts {
     pub(crate) static SYS_CPUTS: u32 = 0;
-}
-
-fn user_mem_assert(p: *const u8, len: usize) {
-    // unimplemented!()
 }
 
 fn sys_cputs(s: &str) {
@@ -28,10 +26,14 @@ pub(crate) unsafe fn syscall(
     if syscall_no == SYS_CPUTS {
         let raw_s = a1 as *const u8;
         let len = a2 as usize;
-        user_mem_assert(raw_s, len);
-        println!("raw_s: {:p}, len: {}", raw_s, len);
-        let s = slice::from_raw_parts(raw_s, len);
-        let s = str::from_utf8(s).expect("illegal utf8 string");
+        let curenv = env::cur_env().expect("curenv should be exist");
+
+        env::user_mem_assert(curenv, VirtAddr(raw_s as u32), len, 0);
+
+        let s = {
+            let utf8s = slice::from_raw_parts(raw_s, len);
+            str::from_utf8(utf8s).expect("illegal utf8 string")
+        };
         sys_cputs(s);
         0
     } else {

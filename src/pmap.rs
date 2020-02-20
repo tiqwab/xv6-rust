@@ -425,6 +425,48 @@ impl PageDirectory {
             pde.clear();
         }
     }
+
+    /// Check that an environment is allowed to access the range of memory
+    /// [va, va+len) with permissions 'perm | PTE_P'.
+    /// Normally 'perm' will contain PTE_U at least, but this is not required.
+    /// 'va' and 'len' need not be page-aligned; you must test every page that
+    /// contains any of that range.  You will test either 'len/PGSIZE',
+    /// 'len/PGSIZE + 1', or 'len/PGSIZE + 2' pages.
+    ///
+    /// A user program can access a virtual address if (1) the address is below
+    /// ULIM, and (2) the page table gives it permission.  These are exactly
+    /// the tests you should implement here.
+    ///
+    /// If there is an error, Return Err(addr), which is the first erroneous virtual address.
+    /// Returns Ok if the user program can access this range of addresses.
+    pub(crate) fn user_mem_check(
+        &mut self,
+        orig_va: VirtAddr,
+        orig_len: usize,
+        perm: u32,
+    ) -> Result<(), VirtAddr> {
+        unsafe {
+            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+            let start_va = orig_va.round_down(PGSIZE as usize);
+            let end_va = (orig_va + orig_len).round_up(PGSIZE as usize);
+
+            let mut va = start_va;
+            while va < end_va {
+                if va > VirtAddr(ULIM) {
+                    return Err(va);
+                }
+                let pte_opt = self.walk(va, false, allocator);
+                match pte_opt {
+                    None => return Err(va),
+                    Some(pte) if pte.attr() & perm != perm => return Err(va),
+                    _ => (),
+                }
+                va += PGSIZE;
+            }
+
+            return Ok(());
+        }
+    }
 }
 
 impl Index<usize> for PageDirectory {
