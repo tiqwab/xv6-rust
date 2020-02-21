@@ -1,8 +1,10 @@
 use crate::pmap::PhysAddr;
 use core::mem;
 
-/// See MultiProcessor Specification (MP)
-/// https://pdos.csail.mit.edu/6.828/2018/readings/ia32/MPspec.pdf
+/*
+ * See MultiProcessor Specification (MP)
+ * https://pdos.csail.mit.edu/6.828/2018/readings/ia32/MPspec.pdf
+ */
 
 /// MP Floating Pointer Structure
 /// See MP 4.1
@@ -74,20 +76,10 @@ impl Mp {
         }
 
         if mp != end {
-            // checksum
-            // Rust detects overflow, so accumulates as u32.
-            let p = mp.cast::<u8>();
-            let size = mem::size_of::<Mp>();
-            let mut sum: u32 = 0;
-
-            for i in 0..size {
-                sum += p.offset(i as isize).read() as u32;
-            }
-
-            if (sum & 0xff) != 0 {
-                None
-            } else {
+            if check_sum(mp, mem::size_of::<Mp>()) {
                 mp.as_ref()
+            } else {
+                None
             }
         } else {
             None
@@ -95,7 +87,95 @@ impl Mp {
     }
 }
 
+/// MP Configuration Table Header
+/// See MP 4.2
+#[repr(C, packed)]
+struct MpConf {
+    signature: [u8; 4], // "PCMP"
+    length: u16,        // the length of the base configuration table in bytes.
+    version: u8,        // the version number of the MP specification.
+    checksum: u8,
+    product: [u8; 20],    // product id
+    oem_table: PhysAddr,  // OEM table pointer
+    oem_length: u16,      // OEM table length
+    entry: u16,           // the number of entries in the variable portion of the base table
+    lapic_addr: PhysAddr, // the physical address of local APIC
+    xlength: u16,         // the length in bytes of the extended entries
+    xchecksum: u8,        // the checksum for the extended entries
+    reserved: u8,
+    entries: [u8; 0], // table entries (the number of entries is in 'entry' field)
+}
+
+impl MpConf {
+    unsafe fn new() -> Result<&'static MpConf, &'static str> {
+        let mp = {
+            let p = Mp::new().ok_or("MP floating pointer structure is not found")?;
+            if p.phys_addr == PhysAddr(0) || p.typ != 0 {
+                Err("SMP: Default configurations not implemented")
+            } else {
+                Ok(p)
+            }
+        }?;
+
+        let conf = {
+            let p = mp.phys_addr.to_va().as_ptr::<MpConf>().as_ref();
+            let p = p.ok_or("null pointer")?;
+            if &p.signature != &[0x50, 0x43, 0x4d, 0x50] {
+                Err("SMP: Incorrect MP configuration table signature")
+            } else {
+                Ok(p)
+            }
+        }?;
+
+        if !check_sum(conf, conf.length as usize) {
+            return Err("SMP: Bad MP configuration checksum");
+        }
+
+        if conf.version != 1 && conf.version != 4 {
+            return Err("SMP: Unsupported MP version");
+        }
+
+        let ptr_for_extended = (conf as *const MpConf).offset(conf.length as isize);
+        if !check_sum(ptr_for_extended, conf.xlength as usize) {
+            return Err("SMP: Bad MP configuration extended checksum");
+        }
+
+        Ok(conf)
+    }
+}
+
+/*
+ * Base MP Configuration Table Entries.
+ * They are kinds of entries following MpConf.
+ */
+
+/// Processor Entries
+#[repr(C, packed)]
+struct MpProc {
+    typ: u8,            // entry type (0 for Processor Entries)
+    apicid: u8,         // local APIC id
+    version: u8,        // local APIC version
+    flags: u8,          // CPU flags
+    signature: [u8; 4], // CPU signature
+    feature: u32,       // feature flags from CPUID instruction
+    reserved: [u8; 8],
+}
+
+unsafe fn check_sum<T>(mp: *const T, size: usize) -> bool {
+    // checksum
+    // Rust detects overflow, so accumulates as u32.
+    let p = mp.cast::<u8>();
+    let mut sum: u32 = 0;
+
+    for i in 0..size {
+        sum += p.offset(i as isize).read() as u32;
+    }
+
+    (sum & 0xff) == 0
+}
+
 pub(crate) fn mp_init() {
     let mp = unsafe { Mp::new().expect("mp should be found") };
     println!("mp found at {:p}", mp as *const Mp);
+    let conf = unsafe { MpConf::new().unwrap() };
 }
