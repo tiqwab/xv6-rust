@@ -41,6 +41,14 @@ impl VirtAddr {
     pub(crate) fn round_down(&self, size: usize) -> VirtAddr {
         VirtAddr(round_down_u32(self.0, size as u32))
     }
+
+    pub(crate) fn as_ptr<T>(&self) -> *const T {
+        self.0 as *const T
+    }
+
+    pub(crate) fn as_mut_ptr<T>(&self) -> *mut T {
+        self.0 as *mut T
+    }
 }
 
 impl Add<u32> for VirtAddr {
@@ -91,7 +99,7 @@ impl Sub<usize> for VirtAddr {
 pub(crate) struct PhysAddr(pub(crate) u32);
 
 impl PhysAddr {
-    fn to_va(&self) -> VirtAddr {
+    pub(crate) fn to_va(&self) -> VirtAddr {
         assert!(self.0 <= 0xf0000000, "PhysAddr(0x{:x}) is too high", self.0);
         VirtAddr(self.0 | KERN_BASE)
     }

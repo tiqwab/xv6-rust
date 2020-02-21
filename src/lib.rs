@@ -21,6 +21,7 @@ mod elf;
 mod env;
 mod gdt;
 mod kclock;
+mod mpconfig;
 mod pmap;
 pub mod serial;
 mod syscall;
@@ -76,6 +77,8 @@ pub fn lib_main() {
     unsafe {
         trap::trap_init();
     }
+
+    mpconfig::mp_init();
 
     print!("H");
     println!("ello");
