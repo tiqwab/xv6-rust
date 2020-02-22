@@ -78,7 +78,9 @@ pub fn lib_main() {
         trap::trap_init();
     }
 
-    mpconfig::mp_init();
+    unsafe {
+        mpconfig::mp_init();
+    }
 
     print!("H");
     println!("ello");

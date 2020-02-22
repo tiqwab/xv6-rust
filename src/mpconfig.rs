@@ -1,10 +1,30 @@
+use crate::env::Env;
+use crate::gdt::TaskState;
 use crate::pmap::PhysAddr;
+use crate::x86;
+use consts::*;
 use core::mem;
+use core::ptr::{null, null_mut};
 
 /*
  * See MultiProcessor Specification (MP)
  * https://pdos.csail.mit.edu/6.828/2018/readings/ia32/MPspec.pdf
  */
+
+mod consts {
+    // Table entry types
+    pub(crate) const MP_PROC: u8 = 0x00; // One per processor
+    pub(crate) const MP_BUS: u8 = 0x01; // One per bus
+    pub(crate) const MP_IOAPIC: u8 = 0x02; // One per I/O APIC
+    pub(crate) const MP_IOINTR: u8 = 0x03; // One per bus interrupt source
+    pub(crate) const MP_LINTR: u8 = 0x04; // One per system interrupt source
+
+    // Bit flags of MpProc.flag
+    pub(crate) const MPPROC_FLAGS_BP: u8 = (1 << 1);
+
+    // Maximum Number of CPUs
+    pub(crate) const MAX_NUM_CPU: usize = 8;
+}
 
 /// MP Floating Pointer Structure
 /// See MP 4.1
@@ -161,6 +181,12 @@ struct MpProc {
     reserved: [u8; 8],
 }
 
+impl MpProc {
+    fn is_bsp(&self) -> bool {
+        self.flags & MPPROC_FLAGS_BP != 0
+    }
+}
+
 unsafe fn check_sum<T>(mp: *const T, size: usize) -> bool {
     // checksum
     // Rust detects overflow, so accumulates as u32.
@@ -174,8 +200,106 @@ unsafe fn check_sum<T>(mp: *const T, size: usize) -> bool {
     (sum & 0xff) == 0
 }
 
-pub(crate) fn mp_init() {
-    let mp = unsafe { Mp::new().expect("mp should be found") };
+/// Per-CPU state
+#[repr(C)]
+struct CpuInfo {
+    cpu_id: u8,
+    cpu_status: CpuStatus,
+    cpu_env: *const Env,
+    cpu_ts: TaskState,
+}
+
+impl CpuInfo {
+    const fn empty() -> CpuInfo {
+        CpuInfo {
+            cpu_id: 0,
+            cpu_status: CpuStatus::CpuUnused,
+            cpu_env: null(),
+            cpu_ts: TaskState::empty(),
+        }
+    }
+}
+
+// Why it requires 4 bytes?
+#[repr(u32)]
+enum CpuStatus {
+    CpuUnused = 0,
+    CpuStarted,
+    CpuHalted,
+}
+
+/// CPU states
+static mut CPUS: [CpuInfo; MAX_NUM_CPU] = [CpuInfo::empty(); MAX_NUM_CPU];
+/// Total number of CPUS in the system
+static mut NCPU: usize = 0;
+/// Poniter to bsp (bootstrap processor)
+static mut BOOT_CPU: *mut CpuInfo = null_mut();
+/// Physical MMIO address of the local APIC
+static mut LAPIC_ADDR: Option<PhysAddr> = None;
+
+pub(crate) unsafe fn mp_init() {
+    let mp = Mp::new().expect("mp should be found");
     println!("mp found at {:p}", mp as *const Mp);
-    let conf = unsafe { MpConf::new().unwrap() };
+
+    let conf = MpConf::new().unwrap();
+    LAPIC_ADDR = Some(conf.lapic_addr);
+    let mut ismp = true;
+
+    let mut p = conf.entries.as_ptr();
+    for _ in 0..conf.entry {
+        let typ = *p;
+        if typ == MP_PROC {
+            let proc = &(*(p.cast::<MpProc>()));
+            if proc.is_bsp() {
+                BOOT_CPU = &mut CPUS[NCPU];
+            }
+            if NCPU < MAX_NUM_CPU {
+                CPUS[NCPU].cpu_id = NCPU as u8;
+                NCPU += 1;
+            } else {
+                println!("SMP: too many CPUs, CPU {} disabled", proc.apicid);
+            }
+            p = p.offset(mem::size_of::<MpProc>() as isize);
+        } else if typ == MP_BUS {
+            p = p.offset(8);
+        } else if typ == MP_IOAPIC {
+            p = p.offset(8);
+        } else if typ == MP_IOINTR {
+            p = p.offset(8);
+        } else if typ == MP_LINTR {
+            p = p.offset(8);
+        } else {
+            println!("mpinit: unknown config type: {:x}", typ);
+            ismp = false;
+            break;
+        }
+    }
+
+    (&mut (*BOOT_CPU)).cpu_status = CpuStatus::CpuStarted;
+
+    if !ismp {
+        // Didn't like what we found; fall back to no MP.
+        NCPU = 1;
+        LAPIC_ADDR = None;
+        println!("SMP: configuration not found, SMP disabled");
+        return;
+    }
+    println!("SMP: CPU {} found {} CPU(s)", (&(*BOOT_CPU)).cpu_id, NCPU);
+
+    if mp.imcrp > 0 {
+        println!("SMP: Setting IMCR to switch from PIC mode to symmetric I/O mode");
+        imcr_pic_to_apic();
+    }
+}
+
+/// Handle interrupt mode configuration register (IMCR).
+/// Switch to getting interrupts from the LAPIC if the hardware implements PIC mode.
+/// ref. https://github.com/torvalds/linux/blob/54dedb5b571d2fb0d65c3957ecfa9b32ce28d7f0/arch/x86/kernel/apic/apic.c#L119
+#[inline]
+fn imcr_pic_to_apic() {
+    // Select IMCR register
+    x86::outb(0x22, 0x70);
+    // NMI and 8259 INTR go through APIC
+    let orig = x86::inb(0x23);
+    x86::outb(0x23, orig | 0x01);
 }
