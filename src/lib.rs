@@ -21,6 +21,8 @@ mod elf;
 mod env;
 mod gdt;
 mod kclock;
+mod lapic;
+mod mpconfig;
 mod pmap;
 pub mod serial;
 mod syscall;
@@ -75,6 +77,11 @@ pub fn lib_main() {
     }
     unsafe {
         trap::trap_init();
+    }
+
+    unsafe {
+        mpconfig::mp_init();
+        lapic::lapic_init();
     }
 
     print!("H");

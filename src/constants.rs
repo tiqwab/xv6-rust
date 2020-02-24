@@ -3,9 +3,14 @@
 pub(crate) const KERN_BASE: u32 = 0xf0000000;
 pub(crate) const PGSIZE: u32 = 4096;
 pub(crate) const PGSHIFT: u32 = 12;
-pub(crate) const PTE_U: u32 = 0x4;
-pub(crate) const PTE_W: u32 = 0x2;
-pub(crate) const PTE_P: u32 = 0x1;
+
+// Page table/directory entry falgs
+pub(crate) const PTE_PCD: u32 = 0x10; // Cache-disable if set
+pub(crate) const PTE_PWT: u32 = 0x8; // 1: Write-Through, 0: Write-Back
+pub(crate) const PTE_U: u32 = 0x4; // User
+pub(crate) const PTE_W: u32 = 0x2; // Writable
+pub(crate) const PTE_P: u32 = 0x1; // Present
+
 pub(crate) const NPDENTRIES: usize = 1024;
 pub(crate) const NPTENTRIES: usize = 1024;
 pub(crate) const PTSIZE: usize = NPTENTRIES * (PGSIZE as usize);
@@ -17,6 +22,7 @@ pub(crate) const MMIOLIM: u32 = KSTACKTOP - (PTSIZE as u32);
 pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
 pub(crate) const ULIM: u32 = MMIOBASE;
 // Assign kernel heap area instead of Cur. Page Table, RO PAGES, and RO ENVS in JOS
+// TODO: should be above ULIM?
 pub(crate) const KHEAP_BASE: u32 = ULIM - KHEAP_SIZE as u32;
 pub(crate) const KHEAP_SIZE: usize = 3 * PTSIZE;
 

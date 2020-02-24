@@ -47,6 +47,16 @@ pub(crate) mod consts {
     // System segment type bits
     pub(crate) const STS_IG32: u8 = 0xe; // 32-bit Interrupt Gate
     pub(crate) const STS_TG32: u8 = 0xf; // 32-bit Trap Gate
+
+    // Hardware IRQ numbers. We receive these as (IRQ_OFFSET + IRQ_X)
+    pub(crate) const IRQ_OFFSET: u8 = 32; // IRQ 0 corresponds to int IRQ_OFFSET
+
+    pub(crate) const IRQ_TIMER: u8 = 0;
+    pub(crate) const IRQ_KBD: u8 = 1;
+    pub(crate) const IRQ_SERIAL: u8 = 4;
+    pub(crate) const IRQ_SPURIOUS: u8 = 7;
+    pub(crate) const IRQ_IDE: u8 = 14;
+    pub(crate) const IRQ_ERROR: u8 = 19;
 }
 
 #[repr(align(4096))]
