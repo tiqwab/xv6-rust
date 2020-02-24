@@ -95,6 +95,15 @@ impl Sub<usize> for VirtAddr {
     }
 }
 
+impl Sub for VirtAddr {
+    type Output = usize;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        assert!(self.0 > rhs.0, "cannot subtract since rhs is larger");
+        (self.0 - rhs.0) as usize
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PhysAddr(pub(crate) u32);
 
@@ -656,6 +665,47 @@ fn i386_detect_memory() -> (u32, u32) {
     println!("npages: {}, npages_baseme: {}", npages, npages_basemem);
 
     (npages, npages_basemem)
+}
+
+/// Reserve size bytes in the MMIO region and map [pa,pa+size) at this
+/// location. Return the base of the reserved region. size does *not*
+/// have to be multiple of PGSIZE.
+pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr {
+    // Where to start the next region. Initially, this is the
+    // beginning of the MMIO region. Because this is static, its
+    // value will be preserved between calls to mmio_map_region
+    // (just like nextfree in boot_alloc).
+    static mut START_VA: VirtAddr = VirtAddr(MMIOBASE);
+
+    // Reserve size bytes of virtual memory starting at base and
+    // map physical pages [pa,pa+size) to virtual addresses
+    // [base,base+size). Since this is device memory and not
+    // regular DRAM, you'll have to tell the CPU that it isn't
+    // safe to cache access to this memory.  Luckily, the page
+    // tables provide bits for this purpose; simply create the
+    // mapping with PTE_PCD|PTE_PWT (cache-disable and
+    // write-through) in addition to PTE_W. (If you're interested
+    // in more details on this, see section 10.5 of IA32 volume
+    // 3A.)
+    //
+    // Be sure to round size up to a multiple of PGSIZE and to
+    // handle if this reservation would overflow MMIOLIM (it's
+    // okay to simply panic if this happens).
+    unsafe {
+        let pgdir = KERN_PGDIR.as_mut().expect("kern_pgdir should exist");
+        let allocator = PAGE_ALLOCATOR.as_mut().expect("allocator should exist");
+
+        let start_va = START_VA;
+        let end_va = (start_va + orig_size).round_up(PGSIZE as usize);
+        if end_va > VirtAddr(MMIOLIM) {
+            panic!("too lage mmio_map_region");
+        }
+        let size = end_va - start_va;
+        let perm = PTE_W | PTE_PCD | PTE_PWT;
+
+        pgdir.boot_map_region(start_va, size, start_pa, perm, allocator);
+        start_va
+    }
 }
 
 pub fn mem_init() {

@@ -1,7 +1,7 @@
 use crate::env::Env;
 use crate::gdt::TaskState;
 use crate::pmap::PhysAddr;
-use crate::x86;
+use crate::{lapic, x86};
 use consts::*;
 use core::mem;
 use core::ptr::{null, null_mut};
@@ -202,8 +202,8 @@ unsafe fn check_sum<T>(mp: *const T, size: usize) -> bool {
 
 /// Per-CPU state
 #[repr(C)]
-struct CpuInfo {
-    cpu_id: u8,
+pub(crate) struct CpuInfo {
+    pub(crate) cpu_id: u8,
     cpu_status: CpuStatus,
     cpu_env: *const Env,
     cpu_ts: TaskState,
@@ -237,6 +237,7 @@ static mut BOOT_CPU: *mut CpuInfo = null_mut();
 /// Physical MMIO address of the local APIC
 static mut LAPIC_ADDR: Option<PhysAddr> = None;
 
+/// ref. MP Appendix B. Operating System Programming Guidelines (after B.4)
 pub(crate) unsafe fn mp_init() {
     let mp = Mp::new().expect("mp should be found");
     println!("mp found at {:p}", mp as *const Mp);
@@ -290,11 +291,16 @@ pub(crate) unsafe fn mp_init() {
         println!("SMP: Setting IMCR to switch from PIC mode to symmetric I/O mode");
         imcr_pic_to_apic();
     }
+
+    println!("SMP: lapic_addr: 0x{:x}", LAPIC_ADDR.unwrap().0);
 }
 
 /// Handle interrupt mode configuration register (IMCR).
 /// Switch to getting interrupts from the LAPIC if the hardware implements PIC mode.
 /// ref. https://github.com/torvalds/linux/blob/54dedb5b571d2fb0d65c3957ecfa9b32ce28d7f0/arch/x86/kernel/apic/apic.c#L119
+///
+/// This is to change mode from PIC Mode to Virtual Wire Mode (or Symmetric I/O Mode eventually)?
+/// ref. MP 3.6.2.1 PIC Mode
 #[inline]
 fn imcr_pic_to_apic() {
     // Select IMCR register
@@ -302,4 +308,16 @@ fn imcr_pic_to_apic() {
     // NMI and 8259 INTR go through APIC
     let orig = x86::inb(0x23);
     x86::outb(0x23, orig | 0x01);
+}
+
+pub(crate) fn lapic_addr() -> Option<PhysAddr> {
+    unsafe { LAPIC_ADDR.clone() }
+}
+
+pub(crate) fn this_cpu() -> &'static CpuInfo {
+    unsafe { &CPUS[lapic::cpu_num() as usize] }
+}
+
+pub(crate) fn boot_cpu() -> &'static CpuInfo {
+    unsafe { BOOT_CPU.as_ref().expect("BOOT_CPU should be exist") }
 }

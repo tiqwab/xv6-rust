@@ -48,7 +48,7 @@ LDFLAGS := -m elf_i386
 # try to generate a unique GDB port
 GDBPORT	:= 12345
 
-CPUS ?= 1;
+CPUS ?= 1
 
 # Enter QEMU monitor by 'Ctrl+a then c' if -serial mon:stdio is specified
 # ref. https://kashyapc.wordpress.com/2016/02/11/qemu-command-line-behavior-of-serial-stdio-vs-serial-monstdio/
