@@ -22,6 +22,7 @@ mod env;
 mod gdt;
 mod kclock;
 mod lapic;
+mod mp;
 mod mpconfig;
 mod pmap;
 pub mod serial;
