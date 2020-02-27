@@ -4,14 +4,14 @@ use crate::pmap::PhysAddr;
 use crate::{lapic, x86};
 use consts::*;
 use core::mem;
-use core::ptr::{null, null_mut};
+use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 /*
  * See MultiProcessor Specification (MP)
  * https://pdos.csail.mit.edu/6.828/2018/readings/ia32/MPspec.pdf
  */
 
-mod consts {
+pub(crate) mod consts {
     // Table entry types
     pub(crate) const MP_PROC: u8 = 0x00; // One per processor
     pub(crate) const MP_BUS: u8 = 0x01; // One per bus
@@ -218,9 +218,14 @@ impl CpuInfo {
             cpu_ts: TaskState::empty(),
         }
     }
+
+    pub(crate) fn is_started(&self) -> bool {
+        self.cpu_status == CpuStatus::CpuStarted
+    }
 }
 
 // Why it requires 4 bytes?
+#[derive(PartialEq, Eq)]
 #[repr(u32)]
 enum CpuStatus {
     CpuUnused = 0,
@@ -320,4 +325,12 @@ pub(crate) fn this_cpu() -> &'static CpuInfo {
 
 pub(crate) fn boot_cpu() -> &'static CpuInfo {
     unsafe { BOOT_CPU.as_ref().expect("BOOT_CPU should be exist") }
+}
+
+pub(crate) fn cpus() -> &'static [CpuInfo] {
+    unsafe {
+        let p = CPUS.as_ptr();
+        let ncpus = NCPU;
+        &(*slice_from_raw_parts(p, ncpus))
+    }
 }

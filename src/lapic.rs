@@ -192,7 +192,7 @@ pub(crate) fn lapic_init() {
 /// See Appendix B of MultiProcessor Specification.
 ///
 /// addr must be in form of 0x000VV000.
-pub(crate) fn lapic_startap(apic_id: u8, addr: PhysAddr) {
+pub(crate) fn startap(apic_id: u8, addr: PhysAddr) {
     assert!(((addr.0 & 0xfff) == 0) && ((addr.0 >> 20) == 0) && addr.0 != 0);
 
     let lapic = unsafe { LAPIC.as_ref().expect("LAPIC should exist") };

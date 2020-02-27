@@ -30,6 +30,9 @@ pub(crate) const UTOP: u32 = KHEAP_BASE;
 pub(crate) const UXSTACKTOP: u32 = UTOP;
 pub(crate) const USTACKTOP: u32 = UTOP - (2 * PGSIZE as u32);
 
+// Physical address of startup code for non-boot CPUs (APs)
+pub(crate) const MPENTRY_PADDR: u32 = 0x7000;
+
 // CR0
 pub(crate) const CR0_PE: u32 = 0x0000001; // Protection Enable
 pub(crate) const CR0_MP: u32 = 0x0000002; // Monitor coProcessor

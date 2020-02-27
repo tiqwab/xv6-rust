@@ -17,3 +17,7 @@ pub(crate) unsafe fn memcpy(dest: VirtAddr, src: VirtAddr, n: usize) {
         p_src = p_src.add(1);
     }
 }
+
+pub(crate) unsafe fn memmove(dest: VirtAddr, src: VirtAddr, n: usize) {
+    memcpy(dest, src, n);
+}

@@ -1,9 +1,10 @@
 use core::mem;
 use core::ops::{Add, AddAssign, Index, IndexMut, Sub};
-use core::ptr::{null, null_mut};
+use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 use crate::constants::*;
 use crate::kclock;
+use crate::mpconfig::consts::MAX_NUM_CPU;
 use crate::x86;
 use alloc::boxed::Box;
 
@@ -14,6 +15,10 @@ extern "C" {
 
 static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
 static mut PAGE_ALLOCATOR: Option<PageAllocator> = None;
+
+type CpuStack = [u8; KSTKSIZE as usize];
+type CpuStacks = [CpuStack; MAX_NUM_CPU];
+static mut PERCPU_KSTACKS: CpuStacks = [[0; KSTKSIZE as usize]; MAX_NUM_CPU];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VirtAddr(pub(crate) u32);
@@ -895,6 +900,12 @@ impl PageAllocator {
             if i >= npages_basemem && i < first_free_page {
                 continue;
             }
+
+            // assume that the length of codes at mp_entry is less than PGSIZE
+            if (i * PGSIZE) < (MPENTRY_PADDR + PGSIZE) && ((i + 1) * PGSIZE) >= MPENTRY_PADDR {
+                continue;
+            }
+
             let page = unsafe { &mut *(self.pages.add(i as usize)) };
             // println!("page[{}]: {:?}", i, page);
             page.pp_ref = 0;
@@ -1001,4 +1012,8 @@ impl PageAllocator {
             self.page_free_list = pp;
         }
     }
+}
+
+pub(crate) fn percpu_kstacks() -> &'static [CpuStack] {
+    unsafe { &*slice_from_raw_parts(PERCPU_KSTACKS.as_ptr(), MAX_NUM_CPU) }
 }
