@@ -1,6 +1,6 @@
 use crate::env::Env;
 use crate::gdt::TaskState;
-use crate::pmap::PhysAddr;
+use crate::pmap::{PhysAddr, VirtAddr};
 use crate::{lapic, x86};
 use consts::*;
 use core::mem;
@@ -222,6 +222,15 @@ impl CpuInfo {
     pub(crate) fn is_started(&self) -> bool {
         self.cpu_status == CpuStatus::CpuStarted
     }
+
+    pub(crate) fn init_ts(&mut self, esp0: VirtAddr, ss0: u16, iomb: u16) -> &TaskState {
+        self.cpu_ts.init(esp0, ss0, iomb);
+        &self.cpu_ts
+    }
+
+    pub(crate) fn started(&mut self) {
+        self.cpu_status = CpuStatus::CpuStarted;
+    }
 }
 
 // Why it requires 4 bytes?
@@ -321,6 +330,10 @@ pub(crate) fn lapic_addr() -> Option<PhysAddr> {
 
 pub(crate) fn this_cpu() -> &'static CpuInfo {
     unsafe { &CPUS[lapic::cpu_num() as usize] }
+}
+
+pub(crate) fn this_cpu_mut() -> &'static mut CpuInfo {
+    unsafe { &mut CPUS[lapic::cpu_num() as usize] }
 }
 
 pub(crate) fn boot_cpu() -> &'static CpuInfo {

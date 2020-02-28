@@ -3,6 +3,7 @@
 
 use core::ptr::null;
 
+use crate::mpconfig::consts::MAX_NUM_CPU;
 use crate::pmap::{PhysAddr, VirtAddr};
 use crate::x86;
 use consts::*;
@@ -50,7 +51,7 @@ pub(crate) mod consts {
 }
 
 #[repr(align(16))]
-struct GlobalDescriptorTable([SegDesc; 6]);
+struct GlobalDescriptorTable([SegDesc; 5 + MAX_NUM_CPU]);
 
 /// Global descriptor table.
 ///
@@ -98,6 +99,13 @@ static mut GDT: GlobalDescriptorTable = GlobalDescriptorTable([
         GDT_F_PAGE_SIZE | GDT_F_PROTECTED_MODE,
     ),
     // tss, initialized in trap_init_percpu()
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
+    SegDesc::new(0x0, 0x0, 0x0, 0x0),
     SegDesc::new(0x0, 0x0, 0x0, 0x0),
 ]);
 
@@ -264,10 +272,10 @@ pub(crate) unsafe fn init_percpu() {
     x86::lldt(&null_ldt_pointer);
 }
 
-pub(crate) fn set_tss(ts: &TaskState) {
+pub(crate) fn set_tss(selector: u16, ts: &TaskState) {
     let offset = ts as *const TaskState as u32;
     let limit = (mem::size_of::<TaskState>() - 1) as u32;
     let access = GDT_A_PRESENT | GDT_A_RING_0 | GDT_A_TSS_AVAIL;
     let flags = GDT_F_PROTECTED_MODE;
-    unsafe { GDT.0[(GDT_TSS0 >> 3) as usize] = SegDesc::new(offset, limit, access, flags) };
+    unsafe { GDT.0[selector as usize >> 3] = SegDesc::new(offset, limit, access, flags) };
 }

@@ -236,5 +236,5 @@ pub(crate) fn startap(apic_id: u8, addr: PhysAddr) {
 }
 
 pub(crate) fn cpu_num() -> i32 {
-    unsafe { LAPIC.as_ref().expect("LAPIC should exist").cpu_num() }
+    unsafe { LAPIC.as_ref().map(|lapic| lapic.cpu_num()).unwrap_or(0) }
 }

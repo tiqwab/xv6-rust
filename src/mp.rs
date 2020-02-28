@@ -1,6 +1,6 @@
 use crate::constants::*;
 use crate::pmap::{PhysAddr, VirtAddr};
-use crate::{lapic, mpconfig, pmap, util};
+use crate::{gdt, lapic, mpconfig, pmap, trap, util};
 
 extern "C" {
     static mpentry_start: u32;
@@ -49,6 +49,21 @@ pub(crate) fn boot_aps() {
 /// Setup code for APs
 #[no_mangle]
 pub extern "C" fn mp_main() {
+    // We are in high EIP now, safe to switch to kern_pgdir
+    pmap::load_kern_pgdir();
+    let cpu = mpconfig::this_cpu_mut();
+    println!("SMP: CPU {} starting", cpu.cpu_id);
+
+    lapic::lapic_init();
+    unsafe { gdt::init_percpu() };
+    unsafe { trap::trap_init_percpu() };
+
+    // FIXME: change with atomic instruction
+    cpu.started();
+
     // TODO
+    // lock_kernel(); // unlock in shed_halt
+    // sched_yield();
+
     loop {}
 }

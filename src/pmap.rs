@@ -1017,3 +1017,11 @@ impl PageAllocator {
 pub(crate) fn percpu_kstacks() -> &'static [CpuStack] {
     unsafe { &*slice_from_raw_parts(PERCPU_KSTACKS.as_ptr(), MAX_NUM_CPU) }
 }
+
+#[inline]
+pub(crate) fn load_kern_pgdir() {
+    unsafe {
+        let kern_pgdir = KERN_PGDIR.as_mut().expect("KERN_PGDIR should exist");
+        x86::lcr3(kern_pgdir.paddr().unwrap());
+    }
+}
