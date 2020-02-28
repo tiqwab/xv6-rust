@@ -31,6 +31,8 @@ pub(crate) const UXSTACKTOP: u32 = UTOP;
 pub(crate) const USTACKTOP: u32 = UTOP - (2 * PGSIZE as u32);
 
 // Physical address of startup code for non-boot CPUs (APs)
+// #[no_mangle]
+// pub static MPENTRY_PADDR: u32 = 0x7000;
 pub(crate) const MPENTRY_PADDR: u32 = 0x7000;
 
 // CR0

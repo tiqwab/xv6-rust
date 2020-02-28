@@ -34,12 +34,12 @@ mod consts {
     pub(crate) const LVT_MASKED: i32 = 0x00010000; // Interrupt masked. Inhibits reception of the interrupt if set.
 
     // ref. Intel SDM Vol.3 10.6.1 Interrupt Command Register ICR
-    pub(crate) const ICR_INIT: i32 = 0x00000101; // Delivery Mode: INIT
-    pub(crate) const ICR_STARTUP: i32 = 0x00000110; // Deliverymode: Start Up
-    pub(crate) const ICR_LEVEL: i32 = 0x00008000; // Level: Assert if set, otherwise De-Assert.
-    pub(crate) const ICR_BCAST: i32 = 0x00080000; // Destination: All Including Self
+    pub(crate) const ICR_INIT: i32 = 0x00000500; // Delivery Mode: INIT
+    pub(crate) const ICR_STARTUP: i32 = 0x00000600; // Deliverymode: Start Up
     pub(crate) const ICR_DELIVS: i32 = 0x00001000; // Delivery Status: Send Pending if set, otherwise Idle.
     pub(crate) const ICR_ASSERT: i32 = 0x00004000; // Level: Assert interrupt if set, otherwise de-assert
+    pub(crate) const ICR_LEVEL: i32 = 0x00008000; // Level: Assert if set, otherwise De-Assert.
+    pub(crate) const ICR_BCAST: i32 = 0x00080000; // Destination: All Including Self
 
     pub(crate) const TDCR_X1: i32 = 0x0000000b; // divide counts by 1
 }
@@ -205,9 +205,9 @@ pub(crate) fn startap(apic_id: u8, addr: PhysAddr) {
     kclock::mc146818_write(0x0f, 0x0a); // reset PC without power off (restart from POST, and then execute codes in reset vector in real mode)
     {
         let pa = PhysAddr(0x40 << 4 | 0x67).to_va(); // Warm reset vector
-        let p = pa.as_mut_ptr::<u32>();
+        let p = pa.as_mut_ptr::<u16>();
         unsafe { p.offset(0).write(0) }; // offset?
-        unsafe { p.offset(1).write(addr.0 >> 4) }; // segment? maybe see in real mode.
+        unsafe { p.offset(1).write((addr.0 >> 4) as u16) }; // segment? maybe see in real mode.
     }
 
     // "Universal startup algorithm."

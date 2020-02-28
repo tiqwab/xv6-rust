@@ -5,12 +5,14 @@ use crate::{lapic, mpconfig, pmap, util};
 extern "C" {
     static mpentry_start: u32;
     static mpentry_end: u32;
-    static mut mpentry_kstack: u32;
 }
+
+#[no_mangle]
+pub static mut mpentry_kstack: u32 = 0;
 
 /// Start the non-boot (AP) processors.
 /// This function is expected to be executed by BSP (Bootstrap Processor).
-fn boot_aps() {
+pub(crate) fn boot_aps() {
     // Write entry code to unused memory at MPENTRY_PADDR
     let entry_start = unsafe { &mpentry_start as *const _ as u32 };
     let entry_end = unsafe { &mpentry_end as *const _ as u32 };
@@ -35,17 +37,18 @@ fn boot_aps() {
         *stack_for_cpu = (stacks[cpu.cpu_id as usize].as_ptr() as u32) + KSTKSIZE;
 
         // Start the CPU at mpentry_start
-        // TODO
         lapic::startap(cpu.cpu_id, code.to_pa());
 
         // Wait for the CPU to finish some basic setup in mp_main()
-        while !cpu.is_started() {
-            break;
-        }
+        while !cpu.is_started() {}
+
+        println!("Finish initializing CPU({})", cpu.cpu_id);
     }
 }
 
 /// Setup code for APs
-fn mp_main() {
-    // TODO: implement
+#[no_mangle]
+pub extern "C" fn mp_main() {
+    // TODO
+    loop {}
 }

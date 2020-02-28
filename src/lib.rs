@@ -83,6 +83,7 @@ pub fn lib_main() {
     unsafe {
         mpconfig::mp_init();
         lapic::lapic_init();
+        mp::boot_aps();
     }
 
     print!("H");
