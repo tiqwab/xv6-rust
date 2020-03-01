@@ -32,6 +32,8 @@ pub(crate) fn boot_aps() {
             continue; // skip because we've already started.
         }
 
+        println!("Start initializing CPU({})", cpu.cpu_id);
+
         // Tell mpetnry.S what stack to use
         let stack_for_cpu = unsafe { &mut *(&mut mpentry_kstack as *mut u32) };
         *stack_for_cpu = (stacks[cpu.cpu_id as usize].as_ptr() as u32) + KSTKSIZE;
@@ -58,7 +60,6 @@ pub extern "C" fn mp_main() {
     unsafe { gdt::init_percpu() };
     unsafe { trap::trap_init_percpu() };
 
-    // FIXME: change with atomic instruction
     cpu.started();
 
     // TODO

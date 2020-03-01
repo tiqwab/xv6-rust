@@ -50,15 +50,16 @@ impl LocalAPIC {
     fn write(&self, index: isize, value: i32) {
         unsafe {
             let p = self.as_mut_ptr();
-            p.offset(index).write(value);
-            p.offset(ID).read(); // wait for write to finish, by reading
+            p.offset(index).write_volatile(value);
+            p.offset(ID).read_volatile(); // wait for write to finish, by reading
         }
     }
 
     fn read(&self, index: isize) -> i32 {
         unsafe {
             let p = self.as_ptr();
-            p.offset(index).read()
+            p.offset(index).read_volatile()
+            // `*(p.offset(index))` also works, but `p.offset(index).read()` not.
         }
     }
 
@@ -115,6 +116,10 @@ pub(crate) fn lapic_init() {
         unsafe { LAPIC = Some(LocalAPIC(va)) }
         unsafe { LAPIC.as_ref().unwrap() }
     };
+
+    println!("phys addr of lapic: 0x{:x}", lapic_addr.0);
+    println!("virt addr of lapic: 0x{:x}", (lapic.0).0);
+    println!("version of lapic spec: 0x{:x}", lapic.read(VER));
 
     // Enable local APIC; set spurious interrupt vector.
     //

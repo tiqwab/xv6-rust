@@ -709,6 +709,8 @@ pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr 
         let perm = PTE_W | PTE_PCD | PTE_PWT;
 
         pgdir.boot_map_region(start_va, size, start_pa, perm, allocator);
+        START_VA = end_va;
+
         start_va
     }
 }
