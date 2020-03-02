@@ -365,7 +365,7 @@ fn trap_dispatch(tf: &mut Trapframe) {
             if tf.tf_cs == GDT_KERNEL_CODE {
                 panic!("unhandled trap in kernel")
             } else {
-                let curenv = env::cur_env().expect("there is no running Env");
+                let curenv = env::cur_env_mut().expect("there is no running Env");
                 env::env_destroy(curenv);
             }
         }
@@ -393,7 +393,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
 
     // Trapped from user mode
     if tf.tf_cs & 3 == 3 {
-        let curenv = env::cur_env().expect("there is no running Env");
+        let curenv = env::cur_env_mut().expect("there is no running Env");
 
         // Copy trap frame (which is currently on the stack)
         // into 'curenv->env_tf', so that running the environment
@@ -414,7 +414,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     trap_dispatch(tf);
 
     // Return to the current environment, which should be running.
-    let curenv = env::cur_env().expect("there is no running Env");
+    let curenv = env::cur_env_mut().expect("there is no running Env");
     assert!(curenv.is_running(), "the Env is not running");
     env::env_run(curenv);
 }

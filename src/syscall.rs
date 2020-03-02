@@ -28,7 +28,7 @@ pub(crate) unsafe fn syscall(
     if syscall_no == SYS_CPUTS {
         let raw_s = a1 as *const u8;
         let len = a2 as usize;
-        let curenv = env::cur_env().expect("curenv should be exist");
+        let curenv = env::cur_env_mut().expect("curenv should be exist");
 
         env::user_mem_assert(curenv, VirtAddr(raw_s as u32), len, 0);
 
@@ -40,7 +40,7 @@ pub(crate) unsafe fn syscall(
         0
     } else if syscall_no == SYS_EXIT {
         let _status = a1 as i32;
-        let curenv = env::cur_env().expect("curenv should be exist");
+        let curenv = env::cur_env_mut().expect("curenv should be exist");
         println!("[{:08x}] exiting gracefully", curenv.get_env_id());
         env::env_destroy(curenv);
         0

@@ -205,7 +205,7 @@ unsafe fn check_sum<T>(mp: *const T, size: usize) -> bool {
 pub(crate) struct CpuInfo {
     pub(crate) cpu_id: u8,
     cpu_status: CpuStatus,
-    cpu_env: *const Env,
+    cpu_env: *mut Env,
     cpu_ts: TaskState,
 }
 
@@ -214,7 +214,7 @@ impl CpuInfo {
         CpuInfo {
             cpu_id: 0,
             cpu_status: CpuStatus::CpuUnused,
-            cpu_env: null(),
+            cpu_env: null_mut(),
             cpu_ts: TaskState::empty(),
         }
     }
@@ -232,6 +232,18 @@ impl CpuInfo {
         let p = ((&mut self.cpu_status) as *mut CpuStatus).cast::<u32>();
         let v = CpuStatus::CpuStarted as u32;
         x86::xchg(p, v);
+    }
+
+    pub(crate) fn cur_env(&self) -> Option<&Env> {
+        unsafe { self.cpu_env.as_ref() }
+    }
+
+    pub(crate) fn cur_env_mut(&mut self) -> Option<&mut Env> {
+        unsafe { self.cpu_env.as_mut() }
+    }
+
+    pub(crate) fn set_env(&mut self, env: *mut Env) {
+        self.cpu_env = env;
     }
 }
 

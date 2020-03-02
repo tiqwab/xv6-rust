@@ -6,7 +6,7 @@ use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
 use crate::spinlock::Mutex;
 use crate::trap::Trapframe;
-use crate::{util, x86};
+use crate::{mpconfig, util, x86};
 use core::fmt;
 use core::fmt::{Error, Formatter};
 
@@ -121,15 +121,12 @@ static ENV_TABLE: Mutex<EnvTable> = Mutex::new(EnvTable {
     next_env_id: 1,
 });
 
-static mut CUR_ENV: Option<&mut Env> = None;
+pub(crate) fn cur_env() -> Option<&'static Env> {
+    mpconfig::this_cpu().cur_env()
+}
 
-pub(crate) fn cur_env() -> Option<&'static mut Env> {
-    unsafe {
-        match CUR_ENV.as_mut() {
-            None => None,
-            Some(v) => Some(v),
-        }
-    }
+pub(crate) fn cur_env_mut() -> Option<&'static mut Env> {
+    mpconfig::this_cpu_mut().cur_env_mut()
 }
 
 // Initialize the kernel virtual memory layout for environment e.
@@ -278,15 +275,17 @@ unsafe fn env_free(env: &mut Env) {
     // If freeing the current environment, switch to kern_pgdir
     // before freeing the page directory, just in case the page
     // gets reused.
-    if let Some(e) = CUR_ENV.as_mut().filter(|e| e.env_id == env.env_id) {
-        let paddr = e.env_pgdir.paddr().expect("pgdir should be exist");
-        x86::lcr3(paddr);
+    match cur_env_mut() {
+        Some(e) if e.env_id == env.env_id => {
+            let paddr = e.env_pgdir.paddr().expect("pgdir should be exist");
+            x86::lcr3(paddr);
+        }
+        _ => {}
     }
 
     // Note the environment's demise.
     {
-        let curenv = CUR_ENV.as_ref();
-        let curenv_id = curenv.map(|e| e.env_id.0).unwrap_or(0);
+        let curenv_id = cur_env().map(Env::get_env_id).map(|x| x.0).unwrap_or(0);
         println!("[{:08x}] free env {:08x}", curenv_id, env.env_id);
     }
 
@@ -358,17 +357,15 @@ fn env_pop_tf(tf: &Trapframe) -> ! {
 ///
 /// This function does not return.
 pub(crate) fn env_run(env: &'static mut Env) -> ! {
-    unsafe {
-        if let Some(cur) = CUR_ENV.as_mut().filter(|e| e.is_running()) {
-            cur.pause();
-        }
-
-        env.resume();
-        CUR_ENV = Some(env);
-        x86::lcr3(env.env_pgdir.paddr().unwrap());
-
-        env_pop_tf(&env.env_tf);
+    if let Some(cur) = cur_env_mut().filter(|e| e.is_running()) {
+        cur.pause();
     }
+
+    env.resume();
+    mpconfig::this_cpu_mut().set_env(env);
+    x86::lcr3(env.env_pgdir.paddr().unwrap());
+
+    env_pop_tf(&env.env_tf);
 }
 
 /// Checks that environment 'env' is allowed to access the range
