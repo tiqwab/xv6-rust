@@ -16,9 +16,21 @@ extern "C" {
 static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
 static mut PAGE_ALLOCATOR: Option<PageAllocator> = None;
 
-type CpuStack = [u8; KSTKSIZE as usize];
+#[repr(align(4096))]
+pub(crate) struct CpuStack([u8; KSTKSIZE as usize]);
+// type CpuStack = [u8; KSTKSIZE as usize];
 type CpuStacks = [CpuStack; MAX_NUM_CPU];
-static mut PERCPU_KSTACKS: CpuStacks = [[0; KSTKSIZE as usize]; MAX_NUM_CPU];
+static mut PERCPU_KSTACKS: CpuStacks = [CpuStack([0; KSTKSIZE as usize]); MAX_NUM_CPU];
+
+impl CpuStack {
+    pub(crate) fn as_ptr(&self) -> *const CpuStack {
+        self as *const CpuStack
+    }
+
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut CpuStack {
+        self as *mut CpuStack
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VirtAddr(pub(crate) u32);
@@ -763,22 +775,8 @@ pub fn mem_init() {
         &mut allocator,
     );
 
-    // Use the physical memory that 'bootstack' refers to as the kernel
-    // stack.  The kernel stack grows down from virtual address KSTACKTOP.
-    // We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
-    // to be the kernel stack, but break this into two pieces:
-    //     * [KSTACKTOP-KSTKSIZE, KSTACKTOP) -- backed by physical memory
-    //     * [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) -- not backed; so if
-    //       the kernel overflows its stack, it will fault rather than
-    //       overwrite memory.  Known as a "guard page".
-    //     Permissions: kernel RW, user NONE
-    kern_pgdir.boot_map_region(
-        VirtAddr(KSTACKTOP - KSTKSIZE),
-        KSTKSIZE as usize,
-        VirtAddr(unsafe { &bootstack as *const _ as u32 }).to_pa(),
-        PTE_P | PTE_W,
-        &mut allocator,
-    );
+    // Initialize the SMP-related parts of the memory map.
+    mem_init_mp(kern_pgdir, &mut allocator);
 
     // Map all of physical memory at KERNBASE.
     // Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -836,6 +834,37 @@ pub fn mem_init() {
     unsafe {
         KERN_PGDIR = Some(kern_pgdir);
         PAGE_ALLOCATOR = Some(allocator);
+    }
+}
+
+/// Modify mappings in kern_pgdir to support SMP
+///   - Map the per-CPU stacks in the region [KSTACKTOP-PTSIZE, KSTACKTOP)
+fn mem_init_mp(kern_pgdir: &mut PageDirectory, allocator: &mut PageAllocator) {
+    // Map per-CPU stacks starting at KSTACKTOP, for up to 'NCPU' CPUs.
+    //
+    // For CPU i, use the physical memory that 'percpu_kstacks[i]' refers
+    // to as its kernel stack. CPU i's kernel stack grows down from virtual
+    // address kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP), and is
+    // divided into two pieces, just like the single stack you set up in
+    // mem_init:
+    //     * [kstacktop_i - KSTKSIZE, kstacktop_i)
+    //          -- backed by physical memory
+    //     * [kstacktop_i - (KSTKSIZE + KSTKGAP), kstacktop_i - KSTKSIZE)
+    //          -- not backed; so if the kernel overflows its stack,
+    //             it will fault rather than overwrite another CPU's stack.
+    //             Known as a "guard page".
+    //     Permissions: kernel RW, user NONE
+
+    for i in 0..MAX_NUM_CPU {
+        let start_va = VirtAddr(KSTACKTOP - (KSTKSIZE + KSTKGAP) * (i as u32) - KSTKSIZE);
+        let start_pa = unsafe { VirtAddr(&PERCPU_KSTACKS[i] as *const _ as u32).to_pa() };
+        kern_pgdir.boot_map_region(
+            start_va,
+            KSTKSIZE as usize,
+            start_pa,
+            PTE_P | PTE_W,
+            allocator,
+        );
     }
 }
 
