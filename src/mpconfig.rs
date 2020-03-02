@@ -229,7 +229,9 @@ impl CpuInfo {
     }
 
     pub(crate) fn started(&mut self) {
-        self.cpu_status = CpuStatus::CpuStarted;
+        let p = ((&mut self.cpu_status) as *mut CpuStatus).cast::<u32>();
+        let v = CpuStatus::CpuStarted as u32;
+        x86::xchg(p, v);
     }
 }
 

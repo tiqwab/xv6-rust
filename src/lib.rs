@@ -8,6 +8,7 @@
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(thread_local)]
 #![feature(slice_from_raw_parts)]
+#![feature(core_intrinsics)]
 // FIXME: remove later
 #![allow(dead_code)]
 
