@@ -1,4 +1,4 @@
-use crate::mutex::{Mutex, MutexGuard};
+use crate::spinlock::{Mutex, MutexGuard};
 
 static KERNEL_LOCK: Mutex<()> = Mutex::new(());
 

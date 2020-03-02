@@ -4,6 +4,7 @@ use core::ptr::{null, null_mut};
 use crate::constants::*;
 use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
+use crate::spinlock::Mutex;
 use crate::trap::Trapframe;
 use crate::{util, x86};
 use core::fmt;
@@ -104,13 +105,21 @@ impl Env {
 
 struct EnvTable {
     envs: [Option<Env>; NENV as usize],
+    next_env_id: u32,
 }
 
-static mut ENV_TABLE: EnvTable = EnvTable {
-    envs: [None; NENV as usize],
-};
+impl EnvTable {
+    fn generate_env_id(&mut self) -> EnvId {
+        let res = self.next_env_id;
+        self.next_env_id += 1;
+        EnvId(res)
+    }
+}
 
-static mut NEXT_ENV_ID: u32 = 1;
+static ENV_TABLE: Mutex<EnvTable> = Mutex::new(EnvTable {
+    envs: [None; NENV as usize],
+    next_env_id: 1,
+});
 
 static mut CUR_ENV: Option<&mut Env> = None;
 
@@ -120,14 +129,6 @@ pub(crate) fn cur_env() -> Option<&'static mut Env> {
             None => None,
             Some(v) => Some(v),
         }
-    }
-}
-
-fn generate_env_id() -> EnvId {
-    unsafe {
-        let env_id = EnvId(NEXT_ENV_ID);
-        NEXT_ENV_ID += 1;
-        env_id
     }
 }
 
@@ -150,43 +151,44 @@ fn env_setup_vm() -> Box<PageDirectory> {
 ///	-E_NO_FREE_ENV if all NENV environments are allocated
 ///	-E_NO_MEM on memory exhaustion
 fn env_alloc(parent_id: EnvId, typ: EnvType) -> &'static mut Env {
-    unsafe {
-        let mut idx = -1;
-        for (i, env_opt) in ENV_TABLE.envs.iter().enumerate() {
-            if env_opt.is_none() {
-                idx = i as i32;
-                break;
-            }
+    let mut idx = -1;
+    let mut env_table = ENV_TABLE.lock();
+    for (i, env_opt) in env_table.envs.iter().enumerate() {
+        if env_opt.is_none() {
+            idx = i as i32;
+            break;
         }
-        if idx == -1 {
-            panic!("no available env");
-        }
-
-        // Allocate and set up the page directory for this environment.
-        let new_pgdir = env_setup_vm();
-
-        // Generate an env_id for this environment.
-        let new_id = generate_env_id();
-
-        // Set up appropriate initial values for the segment registers.
-        // You will set e->env_tf.tf_eip later.
-        let new_tf = Trapframe::new_for_user();
-
-        let new_env = Env {
-            env_tf: new_tf,
-            env_id: new_id,
-            env_parent_id: parent_id,
-            env_type: typ,
-            env_status: EnvStatus::Runnable,
-            env_runs: 0,
-            env_pgdir: new_pgdir,
-        };
-
-        let env_opt = &mut ENV_TABLE.envs[idx as usize];
-        *env_opt = Some(new_env);
-
-        env_opt.as_mut().unwrap()
     }
+    if idx == -1 {
+        panic!("no available env");
+    }
+
+    // Allocate and set up the page directory for this environment.
+    let new_pgdir = env_setup_vm();
+
+    // Generate an env_id for this environment.
+    let new_id = env_table.generate_env_id();
+
+    // Set up appropriate initial values for the segment registers.
+    // You will set e->env_tf.tf_eip later.
+    let new_tf = Trapframe::new_for_user();
+
+    let new_env = Env {
+        env_tf: new_tf,
+        env_id: new_id,
+        env_parent_id: parent_id,
+        env_type: typ,
+        env_status: EnvStatus::Runnable,
+        env_runs: 0,
+        env_pgdir: new_pgdir,
+    };
+
+    let env_opt = &mut env_table.envs[idx as usize];
+    *env_opt = Some(new_env);
+
+    let res = env_opt.as_mut().unwrap() as *mut Env;
+    unsafe { res.as_mut().unwrap() }
+    // env_opt.as_mut().unwrap()
 }
 
 /// Set up the initial program binary, stack, and processor flags
@@ -309,7 +311,9 @@ unsafe fn env_free(env: &mut Env) {
 
     // return the environment to the free list
     env.env_status = EnvStatus::Free;
-    for entry_opt in ENV_TABLE.envs.iter_mut() {
+
+    let mut env_table = ENV_TABLE.lock();
+    for entry_opt in env_table.envs.iter_mut() {
         match entry_opt {
             Some(entry) if entry.env_id == env.env_id => {
                 *entry_opt = None;

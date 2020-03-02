@@ -30,9 +30,9 @@ impl<T> Mutex<T> {
     /// May be used statically:
     ///
     /// ```
-    /// use spin;
+    /// use spinlock;
     ///
-    /// static MUTEX: spin::Mutex<()> = spin::Mutex::new(());
+    /// static MUTEX: spinlock::Mutex<()> = spinlock::Mutex::new(());
     ///
     /// fn demo() {
     ///     let lock = MUTEX.lock();
