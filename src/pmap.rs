@@ -1,5 +1,5 @@
 use core::mem;
-use core::ops::{Add, AddAssign, Index, IndexMut, Sub};
+use core::ops::{Add, AddAssign, Deref, DerefMut, Index, IndexMut, Sub};
 use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 use crate::constants::*;
@@ -14,9 +14,40 @@ extern "C" {
     static bootstack: u32;
 }
 
-static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
+// This MUST be initialized first with `init()`
+struct KernelPageDirectory(*mut PageDirectory);
+// Get the lock of KERN_PGDIR first if you use both of KERN_PGDIR and PAGE_ALLOCATOR.
+static KERN_PGDIR: Mutex<KernelPageDirectory> = Mutex::new(KernelPageDirectory(null_mut()));
+
+unsafe impl Send for KernelPageDirectory {}
+unsafe impl Sync for KernelPageDirectory {}
+
+impl KernelPageDirectory {
+    fn init(&mut self, pgdir: *mut PageDirectory) {
+        self.0 = pgdir;
+    }
+
+    fn paddr(&self) -> PhysAddr {
+        VirtAddr(self.0 as u32).to_pa()
+    }
+}
+
+impl Deref for KernelPageDirectory {
+    type Target = PageDirectory;
+
+    fn deref(&self) -> &PageDirectory {
+        unsafe { &*self.0 }
+    }
+}
+
+impl DerefMut for KernelPageDirectory {
+    fn deref_mut(&mut self) -> &mut PageDirectory {
+        unsafe { &mut *self.0 }
+    }
+}
 
 // MUST be initialized first with `init()`
+// Get the lock of KERN_PGDIR first if you use both of KERN_PGDIR and PAGE_ALLOCATOR.
 static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator {
     page_free_list: null_mut(),
     pages: null_mut(),
@@ -253,14 +284,12 @@ impl PageDirectory {
 
     pub(crate) fn new_for_user() -> Box<PageDirectory> {
         let mut pgdir = PageDirectory::new();
-        unsafe {
-            let kern_pgdir = KERN_PGDIR.as_ref().expect("KERN_PGDIR is not initialized");
-            // Copy kernel mapping
-            for (i, kern_pde) in kern_pgdir.entries.iter().enumerate() {
-                if kern_pde.exists() {
-                    let pde = PDE(kern_pde.0);
-                    pgdir.entries[i] = pde;
-                }
+        let kern_pgdir = KERN_PGDIR.lock();
+        // Copy kernel mapping
+        for (i, kern_pde) in kern_pgdir.entries.iter().enumerate() {
+            if kern_pde.exists() {
+                let pde = PDE(kern_pde.0);
+                pgdir.entries[i] = pde;
             }
         }
         Box::new(pgdir)
@@ -707,7 +736,7 @@ pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr 
     // handle if this reservation would overflow MMIOLIM (it's
     // okay to simply panic if this happens).
     unsafe {
-        let pgdir = KERN_PGDIR.as_mut().expect("kern_pgdir should exist");
+        let mut pgdir = KERN_PGDIR.lock();
         let mut allocator = PAGE_ALLOCATOR.lock();
 
         let start_va = START_VA;
@@ -733,7 +762,8 @@ pub fn mem_init() {
     let bss_end = VirtAddr(unsafe { &end as *const _ as u32 });
     let mut boot_allocator = BootAllocator::new(bss_end);
     let kern_pgdir_va = boot_allocator.alloc(PGSIZE);
-    let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
+    let mut kern_pgdir = KERN_PGDIR.lock();
+    kern_pgdir.init(kern_pgdir_va.0 as *mut PageDirectory);
     println!("kern_pgdir: 0x{:x}", kern_pgdir_va.0);
     // memset(kern_pgdir, 0, PGSIZE);
 
@@ -774,7 +804,7 @@ pub fn mem_init() {
     );
 
     // Initialize the SMP-related parts of the memory map.
-    mem_init_mp(kern_pgdir, &mut allocator);
+    mem_init_mp(&mut *kern_pgdir, &mut allocator);
 
     // Map all of physical memory at KERNBASE.
     // Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -794,7 +824,7 @@ pub fn mem_init() {
     // page table we just created.	Our instruction pointer should be
     // somewhere between KERNBASE and KERNBASE+4MB right now, which is
     // mapped the same way by both page tables.
-    x86::lcr3(VirtAddr(kern_pgdir as *const PageDirectory as u32).to_pa());
+    x86::lcr3(kern_pgdir.paddr());
 
     // entry.S set the really important flags in cr0 (including enabling
     // paging).  Here we configure the rest of the flags that we care about.
@@ -827,10 +857,6 @@ pub fn mem_init() {
     let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
     if x.is_some() {
         panic!("should be none");
-    }
-
-    unsafe {
-        KERN_PGDIR = Some(kern_pgdir);
     }
 }
 
@@ -1047,8 +1073,6 @@ pub(crate) fn percpu_kstacks() -> &'static [CpuStack] {
 
 #[inline]
 pub(crate) fn load_kern_pgdir() {
-    unsafe {
-        let kern_pgdir = KERN_PGDIR.as_mut().expect("KERN_PGDIR should exist");
-        x86::lcr3(kern_pgdir.paddr().unwrap());
-    }
+    let kern_pgdir = KERN_PGDIR.lock();
+    x86::lcr3(kern_pgdir.paddr());
 }
