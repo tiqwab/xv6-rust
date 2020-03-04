@@ -1,8 +1,19 @@
+use crate::spinlock::Mutex;
+use crate::{serial, vga_buffer};
+use core::fmt;
+
+static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
+
+pub fn print(args: fmt::Arguments) {
+    let _lock = CONSOLE_LOCK.lock();
+    vga_buffer::_print(args);
+    serial::_print(args);
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {
-        $crate::vga_buffer::_print(format_args!($($arg)*));
-        $crate::serial::_print(format_args!($($arg)*));
+        $crate::console::print(format_args!($($arg)*));
     }
 }
 
