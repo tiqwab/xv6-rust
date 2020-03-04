@@ -5,6 +5,7 @@ use core::ptr::{null, null_mut, slice_from_raw_parts};
 use crate::constants::*;
 use crate::kclock;
 use crate::mpconfig::consts::MAX_NUM_CPU;
+use crate::spinlock::Mutex;
 use crate::x86;
 use alloc::boxed::Box;
 
@@ -14,7 +15,12 @@ extern "C" {
 }
 
 static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
-static mut PAGE_ALLOCATOR: Option<PageAllocator> = None;
+
+// MUST be initialized first with `init()`
+static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator {
+    page_free_list: null_mut(),
+    pages: null_mut(),
+});
 
 #[repr(align(4096))]
 pub(crate) struct CpuStack([u8; KSTKSIZE as usize]);
@@ -407,17 +413,15 @@ impl PageDirectory {
     /// Pages should be writable by user and kernel.
     /// Panic if any allocation attempt fails.
     pub(crate) fn region_alloc(&mut self, va: VirtAddr, len: usize) {
-        unsafe {
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
-            let start_va = va.round_down(PGSIZE as usize);
-            let end_va = va.add(len).round_up(PGSIZE as usize);
+        let mut allocator = PAGE_ALLOCATOR.lock();
+        let start_va = va.round_down(PGSIZE as usize);
+        let end_va = va.add(len).round_up(PGSIZE as usize);
 
-            let mut va = start_va;
-            while va < end_va {
-                let pa = allocator.alloc(AllocFlag::None).unwrap();
-                self.insert(pa, va, PTE_U | PTE_W, allocator);
-                va += PGSIZE;
-            }
+        let mut va = start_va;
+        while va < end_va {
+            let pa = allocator.alloc(AllocFlag::None).unwrap();
+            self.insert(pa, va, PTE_U | PTE_W, &mut *allocator);
+            va += PGSIZE;
         }
     }
 
@@ -432,32 +436,28 @@ impl PageDirectory {
     /// Convert a virtual address to a physical address.
     /// Return None if there is not page mapping.
     pub(crate) fn convert_to_pa(&mut self, va: VirtAddr) -> Option<PhysAddr> {
-        unsafe {
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
-            self.lookup(va, allocator)
-                .map(|pte| pte.addr() + (va.0 & 0xfff))
-        }
+        let mut allocator = PAGE_ALLOCATOR.lock();
+        self.lookup(va, &mut *allocator)
+            .map(|pte| pte.addr() + (va.0 & 0xfff))
     }
 
     /// Unmaps PDE as well as all PTEs of the page table specified by the PDE.
     pub(crate) fn remove_pde(&mut self, pdx: PDX) {
-        unsafe {
-            let pde = &self[pdx];
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+        let pde = &self[pdx];
+        let mut allocator = PAGE_ALLOCATOR.lock();
 
-            let pt = pde.table();
-            for i in 0..NPTENTRIES {
-                let pte = &mut pt[i];
-                if pte.exists() {
-                    let va = VirtAddr((pdx.0).0 | ((i as u32) * PGSIZE));
-                    PageDirectory::remove_pte(va, pte, allocator);
-                }
+        let pt = pde.table();
+        for i in 0..NPTENTRIES {
+            let pte = &mut pt[i];
+            if pte.exists() {
+                let va = VirtAddr((pdx.0).0 | ((i as u32) * PGSIZE));
+                PageDirectory::remove_pte(va, pte, &mut *allocator);
             }
-
-            let pde = &mut self[pdx];
-            allocator.decref_pde(pde);
-            pde.clear();
         }
+
+        let pde = &mut self[pdx];
+        allocator.decref_pde(pde);
+        pde.clear();
     }
 
     /// Check that an environment is allowed to access the range of memory
@@ -479,27 +479,25 @@ impl PageDirectory {
         orig_len: usize,
         perm: u32,
     ) -> Result<(), VirtAddr> {
-        unsafe {
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
-            let start_va = orig_va.round_down(PGSIZE as usize);
-            let end_va = (orig_va + orig_len).round_up(PGSIZE as usize);
+        let mut allocator = PAGE_ALLOCATOR.lock();
+        let start_va = orig_va.round_down(PGSIZE as usize);
+        let end_va = (orig_va + orig_len).round_up(PGSIZE as usize);
 
-            let mut va = start_va;
-            while va < end_va {
-                if va > VirtAddr(ULIM) {
-                    return Err(va);
-                }
-                let pte_opt = self.walk(va, false, allocator);
-                match pte_opt {
-                    None => return Err(va),
-                    Some(pte) if pte.attr() & perm != perm => return Err(va),
-                    _ => (),
-                }
-                va += PGSIZE;
+        let mut va = start_va;
+        while va < end_va {
+            if va > VirtAddr(ULIM) {
+                return Err(va);
             }
-
-            return Ok(());
+            let pte_opt = self.walk(va, false, &mut *allocator);
+            match pte_opt {
+                None => return Err(va),
+                Some(pte) if pte.attr() & perm != perm => return Err(va),
+                _ => (),
+            }
+            va += PGSIZE;
         }
+
+        return Ok(());
     }
 }
 
@@ -710,7 +708,7 @@ pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr 
     // okay to simply panic if this happens).
     unsafe {
         let pgdir = KERN_PGDIR.as_mut().expect("kern_pgdir should exist");
-        let allocator = PAGE_ALLOCATOR.as_mut().expect("allocator should exist");
+        let mut allocator = PAGE_ALLOCATOR.lock();
 
         let start_va = START_VA;
         let end_va = (start_va + orig_size).round_up(PGSIZE as usize);
@@ -720,7 +718,7 @@ pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr 
         let size = end_va - start_va;
         let perm = PTE_W | PTE_PCD | PTE_PWT;
 
-        pgdir.boot_map_region(start_va, size, start_pa, perm, allocator);
+        pgdir.boot_map_region(start_va, size, start_pa, perm, &mut *allocator);
         START_VA = end_va;
 
         start_va
@@ -757,8 +755,8 @@ pub fn mem_init() {
     // up the list of free physical pages. Once we've done so, all further
     // memory management will go through the page_* functions. In
     // particular, we can now map memory using boot_map_region or page_insert
-    let mut allocator = PageAllocator::new(pages, &mut boot_allocator, npages, npages_basemem);
-    // memset(pages, 0, npages * sizeof (struct PageInfo));
+    let mut allocator = PAGE_ALLOCATOR.lock();
+    allocator.init(pages, &mut boot_allocator, npages, npages_basemem);
     println!("pages: 0x{:?}", pages);
 
     println!("page_free_list: 0x{:?}", allocator.page_free_list);
@@ -833,7 +831,6 @@ pub fn mem_init() {
 
     unsafe {
         KERN_PGDIR = Some(kern_pgdir);
-        PAGE_ALLOCATOR = Some(allocator);
     }
 }
 
@@ -882,6 +879,7 @@ struct PageInfo {
 }
 
 // FIXME: how to represent it in rust way
+// This MUST be protected by Mutex
 struct PageAllocator {
     page_free_list: *mut PageInfo,
     pages: *mut PageInfo,
@@ -894,26 +892,24 @@ enum AllocFlag {
     AllocZero,
 }
 
-impl PageAllocator {
-    fn new(
-        pages: *mut PageInfo,
-        ba: &mut BootAllocator,
-        npages: u32,
-        npages_basemem: u32,
-    ) -> PageAllocator {
-        let mut allocator = PageAllocator {
-            page_free_list: null_mut(),
-            pages: pages,
-        };
-        allocator.init(ba, npages, npages_basemem);
-        allocator
-    }
+unsafe impl Send for PageAllocator {}
+unsafe impl Sync for PageAllocator {}
 
+impl PageAllocator {
     /// Initialize page structure and memory free list.
     /// After this is done, NEVER use boot_alloc again.  ONLY use the page
     /// allocator functions below to allocate and deallocate physical
     /// memory via the page_free_list.
-    fn init(&mut self, ba: &mut BootAllocator, npages: u32, npages_basemem: u32) {
+    fn init(
+        &mut self,
+        pages: *mut PageInfo,
+        ba: &mut BootAllocator,
+        npages: u32,
+        npages_basemem: u32,
+    ) {
+        self.page_free_list = null_mut();
+        self.pages = pages;
+
         let first_free_page = ba.alloc(0).to_pa().0 / PGSIZE;
         for i in 0..npages {
             // skip the first 4 KB in case that we need real-mode IDT and BIOS structures.
