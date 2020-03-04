@@ -1,17 +1,17 @@
 use crate::env::Env;
 use crate::gdt::TaskState;
-use crate::pmap::PhysAddr;
+use crate::pmap::{PhysAddr, VirtAddr};
 use crate::{lapic, x86};
 use consts::*;
 use core::mem;
-use core::ptr::{null, null_mut};
+use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 /*
  * See MultiProcessor Specification (MP)
  * https://pdos.csail.mit.edu/6.828/2018/readings/ia32/MPspec.pdf
  */
 
-mod consts {
+pub(crate) mod consts {
     // Table entry types
     pub(crate) const MP_PROC: u8 = 0x00; // One per processor
     pub(crate) const MP_BUS: u8 = 0x01; // One per bus
@@ -205,7 +205,7 @@ unsafe fn check_sum<T>(mp: *const T, size: usize) -> bool {
 pub(crate) struct CpuInfo {
     pub(crate) cpu_id: u8,
     cpu_status: CpuStatus,
-    cpu_env: *const Env,
+    cpu_env: *mut Env,
     cpu_ts: TaskState,
 }
 
@@ -214,13 +214,41 @@ impl CpuInfo {
         CpuInfo {
             cpu_id: 0,
             cpu_status: CpuStatus::CpuUnused,
-            cpu_env: null(),
+            cpu_env: null_mut(),
             cpu_ts: TaskState::empty(),
         }
+    }
+
+    pub(crate) fn is_started(&self) -> bool {
+        self.cpu_status == CpuStatus::CpuStarted
+    }
+
+    pub(crate) fn init_ts(&mut self, esp0: VirtAddr, ss0: u16, iomb: u16) -> &TaskState {
+        self.cpu_ts.init(esp0, ss0, iomb);
+        &self.cpu_ts
+    }
+
+    pub(crate) fn started(&mut self) {
+        let p = ((&mut self.cpu_status) as *mut CpuStatus).cast::<u32>();
+        let v = CpuStatus::CpuStarted as u32;
+        x86::xchg(p, v);
+    }
+
+    pub(crate) fn cur_env(&self) -> Option<&Env> {
+        unsafe { self.cpu_env.as_ref() }
+    }
+
+    pub(crate) fn cur_env_mut(&mut self) -> Option<&mut Env> {
+        unsafe { self.cpu_env.as_mut() }
+    }
+
+    pub(crate) fn set_env(&mut self, env: *mut Env) {
+        self.cpu_env = env;
     }
 }
 
 // Why it requires 4 bytes?
+#[derive(PartialEq, Eq)]
 #[repr(u32)]
 enum CpuStatus {
     CpuUnused = 0,
@@ -318,6 +346,18 @@ pub(crate) fn this_cpu() -> &'static CpuInfo {
     unsafe { &CPUS[lapic::cpu_num() as usize] }
 }
 
+pub(crate) fn this_cpu_mut() -> &'static mut CpuInfo {
+    unsafe { &mut CPUS[lapic::cpu_num() as usize] }
+}
+
 pub(crate) fn boot_cpu() -> &'static CpuInfo {
     unsafe { BOOT_CPU.as_ref().expect("BOOT_CPU should be exist") }
+}
+
+pub(crate) fn cpus() -> &'static [CpuInfo] {
+    unsafe {
+        let p = CPUS.as_ptr();
+        let ncpus = NCPU;
+        &(*slice_from_raw_parts(p, ncpus))
+    }
 }

@@ -2,14 +2,13 @@ use crate::constants::*;
 use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
-use crate::syscall;
 use crate::{env, gdt, x86};
+use crate::{mpconfig, syscall};
 use consts::*;
 use core::mem;
 use core::slice;
 
 static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable([GateDesc::empty(); 256]);
-static mut CUR_TS: TaskState = TaskState::empty();
 static mut LAST_TF: Option<Trapframe> = None;
 
 extern "C" {
@@ -239,25 +238,23 @@ pub(crate) unsafe fn trap_init() {
 }
 
 /// Initialize and load the per-CPU TSS and IDT
-unsafe fn trap_init_percpu() {
+pub(crate) unsafe fn trap_init_percpu() {
     // Setup a TSS so that we get the right stack
     // when we trap to the kernel.
-    let esp0 = VirtAddr(KSTACKTOP);
+    let cpu = mpconfig::this_cpu_mut();
+    let selector = GDT_TSS0 + ((cpu.cpu_id as u16) << 3);
+
+    let esp0 = VirtAddr(KSTACKTOP - (KSTKSIZE + KSTKGAP) * (cpu.cpu_id as u32));
     let ss0 = GDT_KERNEL_DATA;
     let iomb = mem::size_of::<TaskState>() as u16;
-    CUR_TS.init(esp0, ss0, iomb);
+    let ts = cpu.init_ts(esp0, ss0, iomb);
 
     // Initialize the TSS slot of the gdt.
-    println!(
-        "CUR_TS: {:p}, size: {}",
-        &CUR_TS,
-        mem::size_of::<TaskState>()
-    );
-    gdt::set_tss(&CUR_TS);
+    gdt::set_tss(selector, ts);
 
     // Load the TSS selector (like other segment selectors,
     // the bottom three bits are special; we leave them 0)
-    x86::ltr(GDT_TSS0);
+    x86::ltr(selector);
 
     // Load the IDT
     let idt_pointer = gdt::DescriptorTablePointer {
@@ -368,7 +365,7 @@ fn trap_dispatch(tf: &mut Trapframe) {
             if tf.tf_cs == GDT_KERNEL_CODE {
                 panic!("unhandled trap in kernel")
             } else {
-                let curenv = env::cur_env().expect("there is no running Env");
+                let curenv = env::cur_env_mut().expect("there is no running Env");
                 env::env_destroy(curenv);
             }
         }
@@ -396,7 +393,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
 
     // Trapped from user mode
     if tf.tf_cs & 3 == 3 {
-        let curenv = env::cur_env().expect("there is no running Env");
+        let curenv = env::cur_env_mut().expect("there is no running Env");
 
         // Copy trap frame (which is currently on the stack)
         // into 'curenv->env_tf', so that running the environment
@@ -417,7 +414,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     trap_dispatch(tf);
 
     // Return to the current environment, which should be running.
-    let curenv = env::cur_env().expect("there is no running Env");
+    let curenv = env::cur_env_mut().expect("there is no running Env");
     assert!(curenv.is_running(), "the Env is not running");
     env::env_run(curenv);
 }

@@ -34,8 +34,8 @@ pub(crate) fn mc146818_read(reg: u8) -> u8 {
     x86::inb(IO_RTC + 1)
 }
 
-// /// Write the NVRAM register value from the real-time clock.
-// pub(crate) fn mc146818_write(reg: u8, datum: u8) {
-//     x86::outb(IO_RTC, reg);
-//     x86::outb(IO_RTC + 1, datum);
-// }
+/// Write the NVRAM register value from the real-time clock.
+pub(crate) fn mc146818_write(reg: u8, datum: u8) {
+    x86::outb(IO_RTC, reg);
+    x86::outb(IO_RTC + 1, datum);
+}

@@ -1,9 +1,11 @@
 use core::mem;
-use core::ops::{Add, AddAssign, Index, IndexMut, Sub};
-use core::ptr::{null, null_mut};
+use core::ops::{Add, AddAssign, Deref, DerefMut, Index, IndexMut, Sub};
+use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 use crate::constants::*;
 use crate::kclock;
+use crate::mpconfig::consts::MAX_NUM_CPU;
+use crate::spinlock::Mutex;
 use crate::x86;
 use alloc::boxed::Box;
 
@@ -12,8 +14,60 @@ extern "C" {
     static bootstack: u32;
 }
 
-static mut KERN_PGDIR: Option<&mut PageDirectory> = None;
-static mut PAGE_ALLOCATOR: Option<PageAllocator> = None;
+// This MUST be initialized first with `init()`
+struct KernelPageDirectory(*mut PageDirectory);
+// Get the lock of KERN_PGDIR first if you use both of KERN_PGDIR and PAGE_ALLOCATOR.
+static KERN_PGDIR: Mutex<KernelPageDirectory> = Mutex::new(KernelPageDirectory(null_mut()));
+
+unsafe impl Send for KernelPageDirectory {}
+unsafe impl Sync for KernelPageDirectory {}
+
+impl KernelPageDirectory {
+    fn init(&mut self, pgdir: *mut PageDirectory) {
+        self.0 = pgdir;
+    }
+
+    fn paddr(&self) -> PhysAddr {
+        VirtAddr(self.0 as u32).to_pa()
+    }
+}
+
+impl Deref for KernelPageDirectory {
+    type Target = PageDirectory;
+
+    fn deref(&self) -> &PageDirectory {
+        unsafe { &*self.0 }
+    }
+}
+
+impl DerefMut for KernelPageDirectory {
+    fn deref_mut(&mut self) -> &mut PageDirectory {
+        unsafe { &mut *self.0 }
+    }
+}
+
+// MUST be initialized first with `init()`
+// Get the lock of KERN_PGDIR first if you use both of KERN_PGDIR and PAGE_ALLOCATOR.
+static PAGE_ALLOCATOR: Mutex<PageAllocator> = Mutex::new(PageAllocator {
+    page_free_list: null_mut(),
+    pages: null_mut(),
+});
+
+#[repr(align(4096))]
+pub(crate) struct CpuStack([u8; KSTKSIZE as usize]);
+// type CpuStack = [u8; KSTKSIZE as usize];
+type CpuStacks = [CpuStack; MAX_NUM_CPU];
+static mut PERCPU_KSTACKS: CpuStacks = [CpuStack([0; KSTKSIZE as usize]); MAX_NUM_CPU];
+
+impl CpuStack {
+    pub(crate) fn as_ptr(&self) -> *const CpuStack {
+        self as *const CpuStack
+    }
+
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut CpuStack {
+        self as *mut CpuStack
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct VirtAddr(pub(crate) u32);
@@ -230,14 +284,12 @@ impl PageDirectory {
 
     pub(crate) fn new_for_user() -> Box<PageDirectory> {
         let mut pgdir = PageDirectory::new();
-        unsafe {
-            let kern_pgdir = KERN_PGDIR.as_ref().expect("KERN_PGDIR is not initialized");
-            // Copy kernel mapping
-            for (i, kern_pde) in kern_pgdir.entries.iter().enumerate() {
-                if kern_pde.exists() {
-                    let pde = PDE(kern_pde.0);
-                    pgdir.entries[i] = pde;
-                }
+        let kern_pgdir = KERN_PGDIR.lock();
+        // Copy kernel mapping
+        for (i, kern_pde) in kern_pgdir.entries.iter().enumerate() {
+            if kern_pde.exists() {
+                let pde = PDE(kern_pde.0);
+                pgdir.entries[i] = pde;
             }
         }
         Box::new(pgdir)
@@ -390,17 +442,15 @@ impl PageDirectory {
     /// Pages should be writable by user and kernel.
     /// Panic if any allocation attempt fails.
     pub(crate) fn region_alloc(&mut self, va: VirtAddr, len: usize) {
-        unsafe {
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
-            let start_va = va.round_down(PGSIZE as usize);
-            let end_va = va.add(len).round_up(PGSIZE as usize);
+        let mut allocator = PAGE_ALLOCATOR.lock();
+        let start_va = va.round_down(PGSIZE as usize);
+        let end_va = va.add(len).round_up(PGSIZE as usize);
 
-            let mut va = start_va;
-            while va < end_va {
-                let pa = allocator.alloc(AllocFlag::None).unwrap();
-                self.insert(pa, va, PTE_U | PTE_W, allocator);
-                va += PGSIZE;
-            }
+        let mut va = start_va;
+        while va < end_va {
+            let pa = allocator.alloc(AllocFlag::None).unwrap();
+            self.insert(pa, va, PTE_U | PTE_W, &mut *allocator);
+            va += PGSIZE;
         }
     }
 
@@ -415,32 +465,28 @@ impl PageDirectory {
     /// Convert a virtual address to a physical address.
     /// Return None if there is not page mapping.
     pub(crate) fn convert_to_pa(&mut self, va: VirtAddr) -> Option<PhysAddr> {
-        unsafe {
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
-            self.lookup(va, allocator)
-                .map(|pte| pte.addr() + (va.0 & 0xfff))
-        }
+        let mut allocator = PAGE_ALLOCATOR.lock();
+        self.lookup(va, &mut *allocator)
+            .map(|pte| pte.addr() + (va.0 & 0xfff))
     }
 
     /// Unmaps PDE as well as all PTEs of the page table specified by the PDE.
     pub(crate) fn remove_pde(&mut self, pdx: PDX) {
-        unsafe {
-            let pde = &self[pdx];
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
+        let pde = &self[pdx];
+        let mut allocator = PAGE_ALLOCATOR.lock();
 
-            let pt = pde.table();
-            for i in 0..NPTENTRIES {
-                let pte = &mut pt[i];
-                if pte.exists() {
-                    let va = VirtAddr((pdx.0).0 | ((i as u32) * PGSIZE));
-                    PageDirectory::remove_pte(va, pte, allocator);
-                }
+        let pt = pde.table();
+        for i in 0..NPTENTRIES {
+            let pte = &mut pt[i];
+            if pte.exists() {
+                let va = VirtAddr((pdx.0).0 | ((i as u32) * PGSIZE));
+                PageDirectory::remove_pte(va, pte, &mut *allocator);
             }
-
-            let pde = &mut self[pdx];
-            allocator.decref_pde(pde);
-            pde.clear();
         }
+
+        let pde = &mut self[pdx];
+        allocator.decref_pde(pde);
+        pde.clear();
     }
 
     /// Check that an environment is allowed to access the range of memory
@@ -462,27 +508,25 @@ impl PageDirectory {
         orig_len: usize,
         perm: u32,
     ) -> Result<(), VirtAddr> {
-        unsafe {
-            let allocator = PAGE_ALLOCATOR.as_mut().unwrap();
-            let start_va = orig_va.round_down(PGSIZE as usize);
-            let end_va = (orig_va + orig_len).round_up(PGSIZE as usize);
+        let mut allocator = PAGE_ALLOCATOR.lock();
+        let start_va = orig_va.round_down(PGSIZE as usize);
+        let end_va = (orig_va + orig_len).round_up(PGSIZE as usize);
 
-            let mut va = start_va;
-            while va < end_va {
-                if va > VirtAddr(ULIM) {
-                    return Err(va);
-                }
-                let pte_opt = self.walk(va, false, allocator);
-                match pte_opt {
-                    None => return Err(va),
-                    Some(pte) if pte.attr() & perm != perm => return Err(va),
-                    _ => (),
-                }
-                va += PGSIZE;
+        let mut va = start_va;
+        while va < end_va {
+            if va > VirtAddr(ULIM) {
+                return Err(va);
             }
-
-            return Ok(());
+            let pte_opt = self.walk(va, false, &mut *allocator);
+            match pte_opt {
+                None => return Err(va),
+                Some(pte) if pte.attr() & perm != perm => return Err(va),
+                _ => (),
+            }
+            va += PGSIZE;
         }
+
+        return Ok(());
     }
 }
 
@@ -692,8 +736,8 @@ pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr 
     // handle if this reservation would overflow MMIOLIM (it's
     // okay to simply panic if this happens).
     unsafe {
-        let pgdir = KERN_PGDIR.as_mut().expect("kern_pgdir should exist");
-        let allocator = PAGE_ALLOCATOR.as_mut().expect("allocator should exist");
+        let mut pgdir = KERN_PGDIR.lock();
+        let mut allocator = PAGE_ALLOCATOR.lock();
 
         let start_va = START_VA;
         let end_va = (start_va + orig_size).round_up(PGSIZE as usize);
@@ -703,7 +747,9 @@ pub(crate) fn mmio_map_region(start_pa: PhysAddr, orig_size: usize) -> VirtAddr 
         let size = end_va - start_va;
         let perm = PTE_W | PTE_PCD | PTE_PWT;
 
-        pgdir.boot_map_region(start_va, size, start_pa, perm, allocator);
+        pgdir.boot_map_region(start_va, size, start_pa, perm, &mut *allocator);
+        START_VA = end_va;
+
         start_va
     }
 }
@@ -716,7 +762,8 @@ pub fn mem_init() {
     let bss_end = VirtAddr(unsafe { &end as *const _ as u32 });
     let mut boot_allocator = BootAllocator::new(bss_end);
     let kern_pgdir_va = boot_allocator.alloc(PGSIZE);
-    let kern_pgdir = unsafe { &mut *(kern_pgdir_va.0 as *mut PageDirectory) };
+    let mut kern_pgdir = KERN_PGDIR.lock();
+    kern_pgdir.init(kern_pgdir_va.0 as *mut PageDirectory);
     println!("kern_pgdir: 0x{:x}", kern_pgdir_va.0);
     // memset(kern_pgdir, 0, PGSIZE);
 
@@ -738,8 +785,8 @@ pub fn mem_init() {
     // up the list of free physical pages. Once we've done so, all further
     // memory management will go through the page_* functions. In
     // particular, we can now map memory using boot_map_region or page_insert
-    let mut allocator = PageAllocator::new(pages, &mut boot_allocator, npages, npages_basemem);
-    // memset(pages, 0, npages * sizeof (struct PageInfo));
+    let mut allocator = PAGE_ALLOCATOR.lock();
+    allocator.init(pages, &mut boot_allocator, npages, npages_basemem);
     println!("pages: 0x{:?}", pages);
 
     println!("page_free_list: 0x{:?}", allocator.page_free_list);
@@ -756,22 +803,8 @@ pub fn mem_init() {
         &mut allocator,
     );
 
-    // Use the physical memory that 'bootstack' refers to as the kernel
-    // stack.  The kernel stack grows down from virtual address KSTACKTOP.
-    // We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
-    // to be the kernel stack, but break this into two pieces:
-    //     * [KSTACKTOP-KSTKSIZE, KSTACKTOP) -- backed by physical memory
-    //     * [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) -- not backed; so if
-    //       the kernel overflows its stack, it will fault rather than
-    //       overwrite memory.  Known as a "guard page".
-    //     Permissions: kernel RW, user NONE
-    kern_pgdir.boot_map_region(
-        VirtAddr(KSTACKTOP - KSTKSIZE),
-        KSTKSIZE as usize,
-        VirtAddr(unsafe { &bootstack as *const _ as u32 }).to_pa(),
-        PTE_P | PTE_W,
-        &mut allocator,
-    );
+    // Initialize the SMP-related parts of the memory map.
+    mem_init_mp(&mut *kern_pgdir, &mut allocator);
 
     // Map all of physical memory at KERNBASE.
     // Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -791,7 +824,7 @@ pub fn mem_init() {
     // page table we just created.	Our instruction pointer should be
     // somewhere between KERNBASE and KERNBASE+4MB right now, which is
     // mapped the same way by both page tables.
-    x86::lcr3(VirtAddr(kern_pgdir as *const PageDirectory as u32).to_pa());
+    x86::lcr3(kern_pgdir.paddr());
 
     // entry.S set the really important flags in cr0 (including enabling
     // paging).  Here we configure the rest of the flags that we care about.
@@ -825,10 +858,36 @@ pub fn mem_init() {
     if x.is_some() {
         panic!("should be none");
     }
+}
 
-    unsafe {
-        KERN_PGDIR = Some(kern_pgdir);
-        PAGE_ALLOCATOR = Some(allocator);
+/// Modify mappings in kern_pgdir to support SMP
+///   - Map the per-CPU stacks in the region [KSTACKTOP-PTSIZE, KSTACKTOP)
+fn mem_init_mp(kern_pgdir: &mut PageDirectory, allocator: &mut PageAllocator) {
+    // Map per-CPU stacks starting at KSTACKTOP, for up to 'NCPU' CPUs.
+    //
+    // For CPU i, use the physical memory that 'percpu_kstacks[i]' refers
+    // to as its kernel stack. CPU i's kernel stack grows down from virtual
+    // address kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP), and is
+    // divided into two pieces, just like the single stack you set up in
+    // mem_init:
+    //     * [kstacktop_i - KSTKSIZE, kstacktop_i)
+    //          -- backed by physical memory
+    //     * [kstacktop_i - (KSTKSIZE + KSTKGAP), kstacktop_i - KSTKSIZE)
+    //          -- not backed; so if the kernel overflows its stack,
+    //             it will fault rather than overwrite another CPU's stack.
+    //             Known as a "guard page".
+    //     Permissions: kernel RW, user NONE
+
+    for i in 0..MAX_NUM_CPU {
+        let start_va = VirtAddr(KSTACKTOP - (KSTKSIZE + KSTKGAP) * (i as u32) - KSTKSIZE);
+        let start_pa = unsafe { VirtAddr(&PERCPU_KSTACKS[i] as *const _ as u32).to_pa() };
+        kern_pgdir.boot_map_region(
+            start_va,
+            KSTKSIZE as usize,
+            start_pa,
+            PTE_P | PTE_W,
+            allocator,
+        );
     }
 }
 
@@ -846,6 +905,7 @@ struct PageInfo {
 }
 
 // FIXME: how to represent it in rust way
+// This MUST be protected by Mutex
 struct PageAllocator {
     page_free_list: *mut PageInfo,
     pages: *mut PageInfo,
@@ -858,26 +918,24 @@ enum AllocFlag {
     AllocZero,
 }
 
-impl PageAllocator {
-    fn new(
-        pages: *mut PageInfo,
-        ba: &mut BootAllocator,
-        npages: u32,
-        npages_basemem: u32,
-    ) -> PageAllocator {
-        let mut allocator = PageAllocator {
-            page_free_list: null_mut(),
-            pages: pages,
-        };
-        allocator.init(ba, npages, npages_basemem);
-        allocator
-    }
+unsafe impl Send for PageAllocator {}
+unsafe impl Sync for PageAllocator {}
 
+impl PageAllocator {
     /// Initialize page structure and memory free list.
     /// After this is done, NEVER use boot_alloc again.  ONLY use the page
     /// allocator functions below to allocate and deallocate physical
     /// memory via the page_free_list.
-    fn init(&mut self, ba: &mut BootAllocator, npages: u32, npages_basemem: u32) {
+    fn init(
+        &mut self,
+        pages: *mut PageInfo,
+        ba: &mut BootAllocator,
+        npages: u32,
+        npages_basemem: u32,
+    ) {
+        self.page_free_list = null_mut();
+        self.pages = pages;
+
         let first_free_page = ba.alloc(0).to_pa().0 / PGSIZE;
         for i in 0..npages {
             // skip the first 4 KB in case that we need real-mode IDT and BIOS structures.
@@ -895,6 +953,12 @@ impl PageAllocator {
             if i >= npages_basemem && i < first_free_page {
                 continue;
             }
+
+            // assume that the length of codes at mp_entry is less than PGSIZE
+            if (i * PGSIZE) < (MPENTRY_PADDR + PGSIZE) && ((i + 1) * PGSIZE) >= MPENTRY_PADDR {
+                continue;
+            }
+
             let page = unsafe { &mut *(self.pages.add(i as usize)) };
             // println!("page[{}]: {:?}", i, page);
             page.pp_ref = 0;
@@ -1001,4 +1065,14 @@ impl PageAllocator {
             self.page_free_list = pp;
         }
     }
+}
+
+pub(crate) fn percpu_kstacks() -> &'static [CpuStack] {
+    unsafe { &*slice_from_raw_parts(PERCPU_KSTACKS.as_ptr(), MAX_NUM_CPU) }
+}
+
+#[inline]
+pub(crate) fn load_kern_pgdir() {
+    let kern_pgdir = KERN_PGDIR.lock();
+    x86::lcr3(kern_pgdir.paddr());
 }

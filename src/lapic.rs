@@ -1,9 +1,9 @@
 // ref. Intel SDM Vol.3 Chapter. 8 and 10 (APIC)
 
 use crate::constants::*;
-use crate::pmap::VirtAddr;
+use crate::pmap::{PhysAddr, VirtAddr};
 use crate::trap::consts::{IRQ_ERROR, IRQ_OFFSET, IRQ_SPURIOUS, IRQ_TIMER};
-use crate::{mpconfig, pmap};
+use crate::{kclock, mpconfig, pmap, x86};
 use consts::*;
 
 mod consts {
@@ -35,9 +35,11 @@ mod consts {
 
     // ref. Intel SDM Vol.3 10.6.1 Interrupt Command Register ICR
     pub(crate) const ICR_INIT: i32 = 0x00000500; // Delivery Mode: INIT
+    pub(crate) const ICR_STARTUP: i32 = 0x00000600; // Deliverymode: Start Up
+    pub(crate) const ICR_DELIVS: i32 = 0x00001000; // Delivery Status: Send Pending if set, otherwise Idle.
+    pub(crate) const ICR_ASSERT: i32 = 0x00004000; // Level: Assert interrupt if set, otherwise de-assert
     pub(crate) const ICR_LEVEL: i32 = 0x00008000; // Level: Assert if set, otherwise De-Assert.
     pub(crate) const ICR_BCAST: i32 = 0x00080000; // Destination: All Including Self
-    pub(crate) const ICR_DELIVS: i32 = 0x00001000; // Delivery Status: Send Pending if set, otherwise Idle.
 
     pub(crate) const TDCR_X1: i32 = 0x0000000b; // divide counts by 1
 }
@@ -48,15 +50,16 @@ impl LocalAPIC {
     fn write(&self, index: isize, value: i32) {
         unsafe {
             let p = self.as_mut_ptr();
-            p.offset(index).write(value);
-            p.offset(ID).read(); // wait for write to finish, by reading
+            p.offset(index).write_volatile(value);
+            p.offset(ID).read_volatile(); // wait for write to finish, by reading
         }
     }
 
     fn read(&self, index: isize) -> i32 {
         unsafe {
             let p = self.as_ptr();
-            p.offset(index).read()
+            p.offset(index).read_volatile()
+            // `*(p.offset(index))` also works, but `p.offset(index).read()` not.
         }
     }
 
@@ -88,6 +91,10 @@ impl LocalAPIC {
         self.write(EOI, 0);
     }
 
+    /// Spin for a given number of microseconds.
+    /// On real hardware would want to tune this dynamically.
+    fn micro_delay(&self, _us: u32) {}
+
     fn as_ptr(&self) -> *const i32 {
         self.0.as_ptr()
     }
@@ -109,6 +116,10 @@ pub(crate) fn lapic_init() {
         unsafe { LAPIC = Some(LocalAPIC(va)) }
         unsafe { LAPIC.as_ref().unwrap() }
     };
+
+    println!("phys addr of lapic: 0x{:x}", lapic_addr.0);
+    println!("virt addr of lapic: 0x{:x}", (lapic.0).0);
+    println!("version of lapic spec: 0x{:x}", lapic.read(VER));
 
     // Enable local APIC; set spurious interrupt vector.
     //
@@ -182,6 +193,53 @@ pub(crate) fn lapic_init() {
     lapic.write(TPR, 0);
 }
 
+/// Start additional processor running entry code at addr.
+/// See Appendix B of MultiProcessor Specification.
+///
+/// addr must be in form of 0x000VV000.
+pub(crate) fn startap(apic_id: u8, addr: PhysAddr) {
+    assert!(((addr.0 & 0xfff) == 0) && ((addr.0 >> 20) == 0) && addr.0 != 0);
+
+    let lapic = unsafe { LAPIC.as_ref().expect("LAPIC should exist") };
+
+    // "The BSP must initialize CMOS shutdown code to 0AH
+    // and the warm reset vector (DWORD based at 40:67) to point at
+    // the AP startup code prior to the [universal startup algorithm]."
+    //
+    // See for values http://www.bioscentral.com/misc/cmosmap.htm
+    kclock::mc146818_write(0x0f, 0x0a); // reset PC without power off (restart from POST, and then execute codes in reset vector in real mode)
+    {
+        let pa = PhysAddr(0x40 << 4 | 0x67).to_va(); // Warm reset vector
+        let p = pa.as_mut_ptr::<u16>();
+        unsafe { p.offset(0).write(0) }; // offset?
+        unsafe { p.offset(1).write((addr.0 >> 4) as u16) }; // segment? maybe see in real mode.
+    }
+
+    // "Universal startup algorithm."
+    // Send INIT (level-triggered) interrupt to reset other CPU.
+    lapic.write(ICRHI, (apic_id as i32) << 24);
+    lapic.write(ICRLO, ICR_INIT | ICR_LEVEL | ICR_ASSERT);
+    lapic.micro_delay(200);
+    lapic.write(ICRLO, ICR_INIT | ICR_LEVEL);
+    lapic.micro_delay(100); // should be 10ms, but too slow in Bochs!
+
+    // Send startup IPI (twice!) to enter code.
+    // Regular hardware is supposed to only accept a STARTUP
+    // when it is in the halted state due to an INIT.  So the second
+    // should be ignored, but it is part of the official Intel algorithm.
+    // Bochs complains about the second one.  Too bad for Bochs.
+    //
+    // This causes the target processor to start executing in Real Mode from address
+    // 000VV000h, where VV is an 8-bit vector that is part of the IPI message.
+    //
+    // See in B.4.2.
+    for _ in 0..2 {
+        lapic.write(ICRHI, (apic_id as i32) << 24);
+        lapic.write(ICRLO, ICR_STARTUP | ((addr.0 as i32) >> 12));
+        lapic.micro_delay(200);
+    }
+}
+
 pub(crate) fn cpu_num() -> i32 {
-    unsafe { LAPIC.as_ref().expect("LAPIC should exist").cpu_num() }
+    unsafe { LAPIC.as_ref().map(|lapic| lapic.cpu_num()).unwrap_or(0) }
 }

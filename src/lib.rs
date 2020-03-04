@@ -8,6 +8,7 @@
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(thread_local)]
 #![feature(slice_from_raw_parts)]
+#![feature(core_intrinsics)]
 // FIXME: remove later
 #![allow(dead_code)]
 
@@ -21,10 +22,13 @@ mod elf;
 mod env;
 mod gdt;
 mod kclock;
+mod kernel_lock;
 mod lapic;
+mod mp;
 mod mpconfig;
 mod pmap;
 pub mod serial;
+mod spinlock;
 mod syscall;
 mod trap;
 mod util;
@@ -82,6 +86,7 @@ pub fn lib_main() {
     unsafe {
         mpconfig::mp_init();
         lapic::lapic_init();
+        mp::boot_aps();
     }
 
     print!("H");

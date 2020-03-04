@@ -85,3 +85,16 @@ pub(crate) fn ltr(selector: u16) {
 pub(crate) fn lidt(p: &DescriptorTablePointer) {
     unsafe { asm!("lidt ($0)" :: "r"(p) : : "volatile") }
 }
+
+#[inline]
+pub(crate) fn xchg<T>(p: *mut T, v: T) -> T {
+    unsafe { core::intrinsics::atomic_xchg(p, v) }
+
+    // Cannot work the below inline assembly...
+    // It causes SIGSEGV when compiled.
+    // ref. https://github.com/rust-lang/rust/issues/31437
+    //
+    // let res: u32;
+    // unsafe { asm!("lock; xchgl $0, $1" : "+m"(*p), "=a"(res) : "1"(v) : "cc" : "volatile") }
+    // res
+}
