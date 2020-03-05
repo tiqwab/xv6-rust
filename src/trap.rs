@@ -414,7 +414,11 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     trap_dispatch(tf);
 
     // Return to the current environment, which should be running.
-    let curenv = env::cur_env_mut().expect("there is no running Env");
-    assert!(curenv.is_running(), "the Env is not running");
-    env::env_run(curenv);
+    {
+        let curenv = env::cur_env_mut().expect("there is no running Env");
+        assert!(curenv.is_running(), "the Env is not running");
+        let env_id = curenv.get_env_id();
+        let table = env::env_table();
+        env::env_run(env_id, table);
+    }
 }

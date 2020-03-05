@@ -27,6 +27,7 @@ mod lapic;
 mod mp;
 mod mpconfig;
 mod pmap;
+mod sched;
 pub mod serial;
 mod spinlock;
 mod syscall;
@@ -93,6 +94,7 @@ pub fn lib_main() {
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);
 
-    let e = env::env_create(EnvType::User);
-    env::env_run(e);
+    env::env_create(EnvType::User);
+
+    sched::sched_yield();
 }

@@ -4,7 +4,7 @@ use core::ptr::{null, null_mut};
 use crate::constants::*;
 use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
-use crate::spinlock::Mutex;
+use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
 use crate::{mpconfig, util, x86};
 use core::fmt;
@@ -22,8 +22,8 @@ extern "C" {
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
 
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct EnvId(u32);
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) struct EnvId(pub(crate) u32);
 
 impl fmt::LowerHex for EnvId {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
@@ -77,6 +77,10 @@ impl Env {
         self.env_status == EnvStatus::Running
     }
 
+    pub(crate) fn is_runnable(&self) -> bool {
+        self.env_status == EnvStatus::Runnable
+    }
+
     fn pause(&mut self) {
         self.env_status = EnvStatus::Runnable;
     }
@@ -98,12 +102,12 @@ impl Env {
         self.env_tf = tf.clone();
     }
 
-    pub(crate) fn get_env_id(&self) -> &EnvId {
-        &self.env_id
+    pub(crate) fn get_env_id(&self) -> EnvId {
+        self.env_id
     }
 }
 
-struct EnvTable {
+pub(crate) struct EnvTable {
     envs: [Option<Env>; NENV as usize],
     next_env_id: u32,
 }
@@ -114,12 +118,40 @@ impl EnvTable {
         self.next_env_id += 1;
         EnvId(res)
     }
+
+    fn find(&mut self, env_id: EnvId) -> Option<&mut Env> {
+        for env_opt in &mut self.envs.iter_mut() {
+            if let Some(env) = env_opt {
+                if env.get_env_id() == env_id {
+                    return Some(env);
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn find_runnable(&mut self) -> Option<EnvId> {
+        let start = cur_env().map(|e| e.get_env_id().0 + 1).unwrap_or(0) as usize;
+        for i in 0..(NENV as usize) {
+            let idx = (start + i) % (NENV as usize);
+            if let Some(env) = &mut self.envs[idx] {
+                if env.is_runnable() {
+                    return Some(env.get_env_id());
+                }
+            }
+        }
+        None
+    }
 }
 
 static ENV_TABLE: Mutex<EnvTable> = Mutex::new(EnvTable {
     envs: [None; NENV as usize],
     next_env_id: 1,
 });
+
+pub(crate) fn env_table() -> MutexGuard<'static, EnvTable> {
+    ENV_TABLE.lock()
+}
 
 pub(crate) fn cur_env() -> Option<&'static Env> {
     mpconfig::this_cpu().cur_env()
@@ -149,7 +181,7 @@ fn env_setup_vm() -> Box<PageDirectory> {
 ///	-E_NO_MEM on memory exhaustion
 fn env_alloc(parent_id: EnvId, typ: EnvType) -> &'static mut Env {
     let mut idx = -1;
-    let mut env_table = ENV_TABLE.lock();
+    let mut env_table = env_table();
     for (i, env_opt) in env_table.envs.iter().enumerate() {
         if env_opt.is_none() {
             idx = i as i32;
@@ -252,7 +284,7 @@ unsafe fn load_icode(env: &mut Env, binary: *const u8) {
 /// This function is ONLY called during kernel initialization,
 /// before running the first user-mode environment.
 /// The new env's parent ID is set to 0.
-pub(crate) fn env_create(typ: EnvType) -> &'static mut Env {
+pub(crate) fn env_create(typ: EnvType) -> EnvId {
     let env = env_alloc(EnvId(0), typ);
 
     unsafe {
@@ -267,7 +299,7 @@ pub(crate) fn env_create(typ: EnvType) -> &'static mut Env {
         load_icode(env, user_nop_start);
     }
 
-    env
+    env.get_env_id()
 }
 
 /// Frees env and all memory it uses.
@@ -311,7 +343,7 @@ unsafe fn env_free(env: &mut Env) {
     // return the environment to the free list
     env.env_status = EnvStatus::Free;
 
-    let mut env_table = ENV_TABLE.lock();
+    let mut env_table = env_table();
     for entry_opt in env_table.envs.iter_mut() {
         match entry_opt {
             Some(entry) if entry.env_id == env.env_id => {
@@ -336,7 +368,7 @@ pub(crate) fn env_destroy(env: &mut Env) {
 /// This exits the kernel and starts executing some environment's code.
 ///
 /// This function does not return.
-fn env_pop_tf(tf: &Trapframe) -> ! {
+fn env_pop_tf(tf: *const Trapframe) -> ! {
     unsafe {
         asm!(
         "movl $0, %esp; \
@@ -354,18 +386,25 @@ fn env_pop_tf(tf: &Trapframe) -> ! {
 
 /// Context switch from curenv to env e.
 /// Note: if this is the first call to env_run, curenv is NULL.
+/// Note: This function unlock a passed MutexGuard<ENV_TABLE>.
 ///
 /// This function does not return.
-pub(crate) fn env_run(env: &'static mut Env) -> ! {
+pub(crate) fn env_run(env_id: EnvId, mut table: MutexGuard<EnvTable>) -> ! {
     if let Some(cur) = cur_env_mut().filter(|e| e.is_running()) {
         cur.pause();
     }
+
+    let env = (*table).find(env_id).unwrap();
+    let env_tf = &env.env_tf as *const Trapframe;
 
     env.resume();
     mpconfig::this_cpu_mut().set_env(env);
     x86::lcr3(env.env_pgdir.paddr().unwrap());
 
-    env_pop_tf(&env.env_tf);
+    // Unlock EnvTable
+    drop(table);
+
+    env_pop_tf(env_tf);
 }
 
 /// Checks that environment 'env' is allowed to access the range
