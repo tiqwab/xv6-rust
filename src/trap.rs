@@ -366,7 +366,8 @@ fn trap_dispatch(tf: &mut Trapframe) {
                 panic!("unhandled trap in kernel")
             } else {
                 let curenv = env::cur_env_mut().expect("there is no running Env");
-                env::env_destroy(curenv);
+                let env_table = env::env_table();
+                env::env_destroy(curenv, env_table);
             }
         }
     }

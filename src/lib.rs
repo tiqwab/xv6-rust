@@ -9,6 +9,7 @@
 #![feature(thread_local)]
 #![feature(slice_from_raw_parts)]
 #![feature(core_intrinsics)]
+#![feature(option_result_contains)]
 // FIXME: remove later
 #![allow(dead_code)]
 

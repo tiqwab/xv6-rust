@@ -6,7 +6,7 @@ use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
-use crate::{mpconfig, util, x86};
+use crate::{mpconfig, sched, util, x86};
 use core::fmt;
 use core::fmt::{Error, Formatter};
 
@@ -88,6 +88,10 @@ impl Env {
     fn resume(&mut self) {
         self.env_status = EnvStatus::Running;
         self.env_runs += 1;
+    }
+
+    fn die(&mut self) {
+        self.env_status = EnvStatus::Dying;
     }
 
     pub(crate) fn get_tf(&self) -> &Trapframe {
@@ -303,7 +307,7 @@ pub(crate) fn env_create(typ: EnvType) -> EnvId {
 }
 
 /// Frees env and all memory it uses.
-unsafe fn env_free(env: &mut Env) {
+unsafe fn env_free(env: &mut Env, env_table: &mut EnvTable) {
     // If freeing the current environment, switch to kern_pgdir
     // before freeing the page directory, just in case the page
     // gets reused.
@@ -343,7 +347,6 @@ unsafe fn env_free(env: &mut Env) {
     // return the environment to the free list
     env.env_status = EnvStatus::Free;
 
-    let mut env_table = env_table();
     for entry_opt in env_table.envs.iter_mut() {
         match entry_opt {
             Some(entry) if entry.env_id == env.env_id => {
@@ -354,14 +357,33 @@ unsafe fn env_free(env: &mut Env) {
     }
 }
 
-// Frees an environment.
-pub(crate) fn env_destroy(env: &mut Env) {
-    unsafe {
-        env_free(env);
+/// Frees an environment.
+///
+/// If env was the current env, then runs a new environment (and does not
+/// return to the caller).
+pub(crate) fn env_destroy(env: &mut Env, mut env_table: MutexGuard<EnvTable>) {
+    let is_myself = if let Some(cur_env) = cur_env() {
+        cur_env.get_env_id() == env.get_env_id()
+    } else {
+        false
+    };
+
+    // If e is currently running on other CPUs, we change its state to
+    // ENV_DYING. A zombie environment will be freed the next time
+    // it traps to the kernel.
+    if env.is_running() && !is_myself {
+        if env.is_running() {
+            env.die();
+            return;
+        }
     }
 
-    println!("Destroyed the only environment - nothing more to do!");
-    loop {}
+    unsafe { env_free(env, &mut *env_table) };
+
+    if is_myself {
+        drop(env_table);
+        sched::sched_yield();
+    }
 }
 
 /// Restores the register values in the Trapframe with the 'iret' instruction.
@@ -418,6 +440,8 @@ pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32
             "[{:08x}] user_mem_check assertion failure for va {:08x}",
             env.env_id, addr.0
         );
-        env_destroy(env);
+
+        let env_table = env_table();
+        env_destroy(env, env_table);
     }
 }

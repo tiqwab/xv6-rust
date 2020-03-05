@@ -4,7 +4,7 @@ use crate::mpconfig;
 use crate::spinlock::MutexGuard;
 
 /// Choose a user environment to run and run it.
-pub(crate) fn sched_yield() {
+pub(crate) fn sched_yield() -> ! {
     // Implement simple round-robin scheduling.
     //
     // Search through 'envs' for an ENV_RUNNABLE environment in
@@ -32,7 +32,7 @@ pub(crate) fn sched_yield() {
     }
 }
 
-pub(crate) fn sched_halt(table: MutexGuard<EnvTable>) {
+pub(crate) fn sched_halt(table: MutexGuard<EnvTable>) -> ! {
     println!("sched_halt: there is no runnable envs.");
     drop(table);
     loop {}

@@ -42,7 +42,8 @@ pub(crate) unsafe fn syscall(
         let _status = a1 as i32;
         let curenv = env::cur_env_mut().expect("curenv should be exist");
         println!("[{:08x}] exiting gracefully", curenv.get_env_id());
-        env::env_destroy(curenv);
+        let env_table = env::env_table();
+        env::env_destroy(curenv, env_table);
         0
     } else {
         panic!("unknown syscall");
