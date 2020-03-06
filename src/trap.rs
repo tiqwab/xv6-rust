@@ -2,7 +2,7 @@ use crate::constants::*;
 use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
-use crate::{env, gdt, x86};
+use crate::{env, gdt, sched, x86};
 use crate::{mpconfig, syscall};
 use consts::*;
 use core::mem;
@@ -395,6 +395,14 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     // Trapped from user mode
     if tf.tf_cs & 3 == 3 {
         let curenv = env::cur_env_mut().expect("there is no running Env");
+
+        if curenv.is_dying() {
+            {
+                let mut env_table = env::env_table();
+                unsafe { env::env_free(curenv, &mut env_table) };
+            }
+            sched::sched_yield();
+        }
 
         // Copy trap frame (which is currently on the stack)
         // into 'curenv->env_tf', so that running the environment

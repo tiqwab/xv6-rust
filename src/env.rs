@@ -6,7 +6,7 @@ use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
-use crate::{mpconfig, sched, util, x86};
+use crate::{mpconfig, pmap, sched, util, x86};
 use core::fmt;
 use core::fmt::{Error, Formatter};
 
@@ -79,6 +79,10 @@ impl Env {
 
     pub(crate) fn is_runnable(&self) -> bool {
         self.env_status == EnvStatus::Runnable
+    }
+
+    pub(crate) fn is_dying(&self) -> bool {
+        self.env_status == EnvStatus::Dying
     }
 
     fn pause(&mut self) {
@@ -307,14 +311,13 @@ pub(crate) fn env_create(typ: EnvType) -> EnvId {
 }
 
 /// Frees env and all memory it uses.
-unsafe fn env_free(env: &mut Env, env_table: &mut EnvTable) {
+pub(crate) unsafe fn env_free(env: &mut Env, env_table: &mut EnvTable) {
     // If freeing the current environment, switch to kern_pgdir
     // before freeing the page directory, just in case the page
     // gets reused.
     match cur_env_mut() {
         Some(e) if e.env_id == env.env_id => {
-            let paddr = e.env_pgdir.paddr().expect("pgdir should be exist");
-            x86::lcr3(paddr);
+            pmap::load_kern_pgdir();
         }
         _ => {}
     }
