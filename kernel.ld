@@ -16,12 +16,14 @@ SECTIONS
 	   the boot loader where to load the kernel in physical memory */
 	.text : AT(0x100000) {
 		*(.text .stub .text.* .gnu.linkonce.t.*)
+        . = ALIGN(0x1000);
 	}
 
 	PROVIDE(etext = .);	/* Define the 'etext' symbol to this value */
 
 	.rodata : {
 		*(.rodata .rodata.* .gnu.linkonce.r.*)
+        . = ALIGN(0x1000);
 	}
 
 	/* Include debugging information in kernel memory */
@@ -31,6 +33,7 @@ SECTIONS
 		PROVIDE(__STAB_END__ = .);
 		BYTE(0)		/* Force the linker to allocate space
 				   for this section */
+        . = ALIGN(0x1000);
 	}
 
 	.stabstr : {
@@ -39,14 +42,16 @@ SECTIONS
 		PROVIDE(__STABSTR_END__ = .);
 		BYTE(0)		/* Force the linker to allocate space
 				   for this section */
+        . = ALIGN(0x1000);
 	}
 
-	/* Adjust the address for the data segment to the next page */
-	. = ALIGN(0x1000);
+	/* Adjust the address for the data segment to the next page -> Changed to adjust after each section */
+	/* . = ALIGN(0x1000); */
 
 	/* The data segment */
 	.data : {
-		*(.data)
+		*(.data .data.*)
+        . = ALIGN(0x1000);
 	}
 
 	.bss : {
@@ -54,6 +59,7 @@ SECTIONS
 		*(.bss)
 		PROVIDE(end = .);
 		BYTE(0)
+        . = ALIGN(0x1000);
 	}
 
 
