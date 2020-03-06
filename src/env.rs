@@ -10,15 +10,6 @@ use crate::{mpconfig, pmap, sched, util, x86};
 use core::fmt;
 use core::fmt::{Error, Formatter};
 
-extern "C" {
-    static _binary_obj_user_nop_start: u8;
-    static _binary_obj_user_nop_end: u8;
-    static _binary_obj_user_nop_size: usize;
-    static _binary_obj_user_hello_start: u8;
-    static _binary_obj_user_hello_end: u8;
-    static _binary_obj_user_hello_size: usize;
-}
-
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
 
@@ -138,8 +129,22 @@ impl EnvTable {
         None
     }
 
+    fn get_idx(&mut self, env_id: EnvId) -> Option<usize> {
+        for (i, env_opt) in &mut self.envs.iter().enumerate() {
+            if let Some(env) = env_opt {
+                if env.get_env_id() == env_id {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
+
     pub(crate) fn find_runnable(&mut self) -> Option<EnvId> {
-        let start = cur_env().map(|e| e.get_env_id().0 + 1).unwrap_or(0) as usize;
+        let start = cur_env()
+            .and_then(|e| self.get_idx(e.get_env_id()))
+            .map(|idx| idx + 1)
+            .unwrap_or(0) as usize;
         for i in 0..(NENV as usize) {
             let idx = (start + i) % (NENV as usize);
             if let Some(env) = &mut self.envs[idx] {
@@ -148,6 +153,14 @@ impl EnvTable {
                 }
             }
         }
+
+        // This is the case where only the current env is runnable (actually it is running)
+        if start > 0 {
+            if let Some(env) = &mut self.envs[start - 1] {
+                return Some(env.get_env_id());
+            }
+        }
+
         None
     }
 }
@@ -292,19 +305,45 @@ unsafe fn load_icode(env: &mut Env, binary: *const u8) {
 /// This function is ONLY called during kernel initialization,
 /// before running the first user-mode environment.
 /// The new env's parent ID is set to 0.
-pub(crate) fn env_create(typ: EnvType) -> EnvId {
+pub(crate) fn env_create_for_hello(typ: EnvType) -> EnvId {
+    extern "C" {
+        static _binary_obj_user_hello_start: u8;
+        static _binary_obj_user_hello_end: u8;
+        static _binary_obj_user_hello_size: usize;
+    }
+
     let env = env_alloc(EnvId(0), typ);
 
     unsafe {
-        let user_nop_start = &_binary_obj_user_hello_start as *const u8;
-        let user_nop_end = &_binary_obj_user_hello_end as *const u8;
-        let user_nop_size = &_binary_obj_user_hello_size as *const usize;
+        let user_hello_start = &_binary_obj_user_hello_start as *const u8;
+        let user_hello_end = &_binary_obj_user_hello_end as *const u8;
+        let user_hello_size = &_binary_obj_user_hello_size as *const usize;
 
-        println!("_binary_obj_user_hello_start: {:?}", user_nop_start);
-        println!("_binary_obj_user_hello_end: {:?}", user_nop_end);
-        println!("_binary_obj_user_hello_size: {:?}", user_nop_size);
+        println!("_binary_obj_user_hello_start: {:?}", user_hello_start);
+        println!("_binary_obj_user_hello_end: {:?}", user_hello_end);
+        println!("_binary_obj_user_hello_size: {:?}", user_hello_size);
 
-        load_icode(env, user_nop_start);
+        load_icode(env, user_hello_start);
+    }
+
+    env.get_env_id()
+}
+
+pub(crate) fn env_create_for_yield(typ: EnvType) -> EnvId {
+    extern "C" {
+        static _binary_obj_user_yield_start: u8;
+        static _binary_obj_user_yield_end: u8;
+        static _binary_obj_user_yield_size: usize;
+    }
+
+    let env = env_alloc(EnvId(0), typ);
+
+    unsafe {
+        let user_yield_start = &_binary_obj_user_yield_start as *const u8;
+        let _user_yield_end = &_binary_obj_user_yield_end as *const u8;
+        let _user_yield_size = &_binary_obj_user_yield_size as *const usize;
+
+        load_icode(env, user_yield_start);
     }
 
     env.get_env_id()

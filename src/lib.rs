@@ -95,7 +95,10 @@ pub fn lib_main() {
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);
 
-    env::env_create(EnvType::User);
+    env::env_create_for_hello(EnvType::User);
+    env::env_create_for_yield(EnvType::User);
+    env::env_create_for_yield(EnvType::User);
+    env::env_create_for_yield(EnvType::User);
 
     sched::sched_yield();
 }

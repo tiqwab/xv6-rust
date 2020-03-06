@@ -1,6 +1,7 @@
 UPROGS += \
 	$(OBJDIR)/user/nop \
-	$(OBJDIR)/user/hello
+	$(OBJDIR)/user/hello \
+	$(OBJDIR)/user/yield \
 
 include user/lib/module.mk
 

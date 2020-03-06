@@ -9,6 +9,8 @@
 #define SYS_CPUTS 0
 #define SYS_GETC 1
 #define SYS_EXIT 2
+#define SYS_YIELD 3
+#define SYS_GET_ENV_ID 4
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -44,4 +46,12 @@ void sys_cputs(const char *s, int len) {
 
 void sys_exit(int status) {
     syscall(SYS_EXIT, status, 0, 0, 0, 0);
+}
+
+void sys_yield(void) {
+    syscall(SYS_YIELD, 0, 0, 0, 0, 0);
+}
+
+int sys_get_env_id(void) {
+    return syscall(SYS_GET_ENV_ID, 0, 0, 0, 0, 0);
 }
