@@ -4,7 +4,9 @@ USER_LIB_CFLAGS := $(CFLAGS) -gstabs
 
 USER_LIB_SRCS := \
 	user/lib/printf.c \
+	user/lib/printfmt.c \
 	user/lib/strlen.c \
+	user/lib/strnlen.c \
 	user/lib/syscall.c \
 	user/lib/exit.c \
 
