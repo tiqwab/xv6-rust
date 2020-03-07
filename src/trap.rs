@@ -2,7 +2,7 @@ use crate::constants::*;
 use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
-use crate::{env, gdt, x86};
+use crate::{env, gdt, sched, x86};
 use crate::{mpconfig, syscall};
 use consts::*;
 use core::mem;
@@ -366,7 +366,8 @@ fn trap_dispatch(tf: &mut Trapframe) {
                 panic!("unhandled trap in kernel")
             } else {
                 let curenv = env::cur_env_mut().expect("there is no running Env");
-                env::env_destroy(curenv);
+                let env_table = env::env_table();
+                env::env_destroy(curenv, env_table);
             }
         }
     }
@@ -395,6 +396,14 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     if tf.tf_cs & 3 == 3 {
         let curenv = env::cur_env_mut().expect("there is no running Env");
 
+        if curenv.is_dying() {
+            {
+                let mut env_table = env::env_table();
+                unsafe { env_table.env_free(curenv) };
+            }
+            sched::sched_yield();
+        }
+
         // Copy trap frame (which is currently on the stack)
         // into 'curenv->env_tf', so that running the environment
         // will restart at the trap point.
@@ -414,7 +423,11 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     trap_dispatch(tf);
 
     // Return to the current environment, which should be running.
-    let curenv = env::cur_env_mut().expect("there is no running Env");
-    assert!(curenv.is_running(), "the Env is not running");
-    env::env_run(curenv);
+    {
+        let curenv = env::cur_env_mut().expect("there is no running Env");
+        assert!(curenv.is_running(), "the Env is not running");
+        let env_id = curenv.get_env_id();
+        let table = env::env_table();
+        env::env_run(env_id, table);
+    }
 }

@@ -9,6 +9,7 @@
 #![feature(thread_local)]
 #![feature(slice_from_raw_parts)]
 #![feature(core_intrinsics)]
+#![feature(option_result_contains)]
 // FIXME: remove later
 #![allow(dead_code)]
 
@@ -27,6 +28,7 @@ mod lapic;
 mod mp;
 mod mpconfig;
 mod pmap;
+mod sched;
 pub mod serial;
 mod spinlock;
 mod syscall;
@@ -40,7 +42,6 @@ extern crate alloc;
 extern crate linked_list_allocator;
 
 use crate::allocator::HeapAllocator;
-use crate::env::EnvType;
 use constants::*;
 use core::panic::PanicInfo;
 use vga_buffer::Buffer;
@@ -86,13 +87,22 @@ pub fn lib_main() {
     unsafe {
         mpconfig::mp_init();
         lapic::lapic_init();
-        mp::boot_aps();
+        // do mp::boot_aps() after preparing processes
     }
 
     print!("H");
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);
 
-    let e = env::env_create(EnvType::User);
-    env::env_run(e);
+    {
+        let mut env_table = env::env_table();
+        env::env_create_for_hello(&mut env_table);
+        env::env_create_for_yield(&mut env_table);
+        env::env_create_for_yield(&mut env_table);
+        env::env_create_for_yield(&mut env_table);
+    }
+
+    unsafe { mp::boot_aps() };
+
+    sched::sched_yield();
 }

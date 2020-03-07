@@ -832,32 +832,6 @@ pub fn mem_init() {
     cr0 |= CR0_PE | CR0_PG | CR0_AM | CR0_WP | CR0_NE | CR0_MP;
     cr0 &= !(CR0_TS | CR0_EM);
     x86::lcr0(cr0);
-
-    let x = kern_pgdir
-        .lookup(VirtAddr(0xf0000000), &mut allocator)
-        .unwrap();
-    println!("pte: 0x{:x}", x.0);
-    let x = kern_pgdir
-        .lookup(VirtAddr(0xf0001000), &mut allocator)
-        .unwrap();
-    println!("pte: 0x{:x}", x.0);
-
-    // insert and remove test
-    let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
-    if x.is_some() {
-        panic!("should be none");
-    }
-    let x = allocator.alloc(AllocFlag::AllocZero).unwrap();
-    kern_pgdir.insert(x, VirtAddr(0x00000000), PTE_P | PTE_W, &mut allocator);
-    let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
-    if x.is_none() {
-        panic!("should be some");
-    }
-    kern_pgdir.remove(VirtAddr(0x00000000), &mut allocator);
-    let x = kern_pgdir.lookup(VirtAddr(0x00000000), &mut allocator);
-    if x.is_some() {
-        panic!("should be none");
-    }
 }
 
 /// Modify mappings in kern_pgdir to support SMP

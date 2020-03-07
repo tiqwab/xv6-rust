@@ -1,7 +1,9 @@
 // This file comes from kern/syscall.c in jos. See COPYRIGHT for copyright information.
 
 use crate::env;
+use crate::env::EnvId;
 use crate::pmap::VirtAddr;
+use crate::sched;
 use consts::*;
 use core::slice;
 use core::str;
@@ -10,10 +12,21 @@ mod consts {
     pub(crate) static SYS_CPUTS: u32 = 0;
     pub(crate) static SYS_GETC: u32 = 1;
     pub(crate) static SYS_EXIT: u32 = 2;
+    pub(crate) static SYS_YIELD: u32 = 3;
+    pub(crate) static SYS_GET_ENV_ID: u32 = 4;
 }
 
 fn sys_cputs(s: &str) {
     print!("{}", s);
+}
+
+fn sys_yield() {
+    sched::sched_yield();
+}
+
+fn sys_get_env_id() -> EnvId {
+    let cur_env = env::cur_env().unwrap();
+    cur_env.get_env_id()
 }
 
 /// Dispatched to the correct kernel function, passing the arguments.
@@ -42,8 +55,15 @@ pub(crate) unsafe fn syscall(
         let _status = a1 as i32;
         let curenv = env::cur_env_mut().expect("curenv should be exist");
         println!("[{:08x}] exiting gracefully", curenv.get_env_id());
-        env::env_destroy(curenv);
+        let env_table = env::env_table();
+        env::env_destroy(curenv, env_table);
         0
+    } else if syscall_no == SYS_YIELD {
+        sys_yield();
+        0
+    } else if syscall_no == SYS_GET_ENV_ID {
+        let env_id = sys_get_env_id();
+        env_id.0 as i32
     } else {
         panic!("unknown syscall");
     }

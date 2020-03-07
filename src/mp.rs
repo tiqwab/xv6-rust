@@ -1,6 +1,6 @@
 use crate::constants::*;
 use crate::pmap::{PhysAddr, VirtAddr};
-use crate::{gdt, lapic, mpconfig, pmap, trap, util};
+use crate::{gdt, lapic, mpconfig, pmap, sched, trap, util};
 
 extern "C" {
     static mpentry_start: u32;
@@ -62,9 +62,5 @@ pub extern "C" fn mp_main() {
 
     cpu.started();
 
-    // TODO
-    // lock_kernel(); // unlock in shed_halt
-    // sched_yield();
-
-    loop {}
+    sched::sched_yield();
 }
