@@ -399,7 +399,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
         if curenv.is_dying() {
             {
                 let mut env_table = env::env_table();
-                unsafe { env::env_free(curenv, &mut env_table) };
+                unsafe { env_table.env_free(curenv) };
             }
             sched::sched_yield();
         }

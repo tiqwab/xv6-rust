@@ -42,7 +42,6 @@ extern crate alloc;
 extern crate linked_list_allocator;
 
 use crate::allocator::HeapAllocator;
-use crate::env::EnvType;
 use constants::*;
 use core::panic::PanicInfo;
 use vga_buffer::Buffer;
@@ -88,17 +87,22 @@ pub fn lib_main() {
     unsafe {
         mpconfig::mp_init();
         lapic::lapic_init();
-        mp::boot_aps();
+        // do mp::boot_aps() after preparing processes
     }
 
     print!("H");
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);
 
-    env::env_create_for_hello(EnvType::User);
-    env::env_create_for_yield(EnvType::User);
-    env::env_create_for_yield(EnvType::User);
-    env::env_create_for_yield(EnvType::User);
+    {
+        let mut env_table = env::env_table();
+        env::env_create_for_hello(&mut env_table);
+        env::env_create_for_yield(&mut env_table);
+        env::env_create_for_yield(&mut env_table);
+        env::env_create_for_yield(&mut env_table);
+    }
+
+    unsafe { mp::boot_aps() };
 
     sched::sched_yield();
 }
