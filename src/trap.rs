@@ -300,7 +300,7 @@ unsafe fn print_trapframe(tf: &Trapframe) {
     // If this trap was a page fault that just happened
     // (so %cr2 is meaningful), print the faulting linear address.
     if Some(tf) == LAST_TF.as_ref() && tf.tf_trapno == T_PGFLT {
-        println!("  cr2  0x{:08x}", x86::rcr2());
+        println!("  cr2   0x{:08x}", x86::rcr2());
     }
     print!("  err   0x{:08x}", tf.tf_err);
     // For page faults, print decoded fault error code:
@@ -311,7 +311,7 @@ unsafe fn print_trapframe(tf: &Trapframe) {
         println!(
             " [{}, {}, {}]",
             if tf.tf_err & 4 > 0 { "user" } else { "kernel" },
-            if tf.tf_err & 2 > 0 { "write" } else { " read" },
+            if tf.tf_err & 2 > 0 { "write" } else { "read" },
             if tf.tf_err & 1 > 0 {
                 "protection"
             } else {
@@ -344,8 +344,8 @@ unsafe fn print_regs(regs: &PushRegs) {
 fn trap_dispatch(tf: &mut Trapframe) {
     // Handle processor exceptions.
     match tf.tf_trapno {
-        T_PGFLT => unimplemented!(),
-        T_BRKPT => unimplemented!(),
+        // T_PGFLT => unimplemented!(),
+        // T_BRKPT => unimplemented!(),
         T_SYSCALL => unsafe {
             let ret = syscall::syscall(
                 tf.tf_regs.reg_eax,

@@ -14,6 +14,7 @@ mod consts {
     pub(crate) static SYS_EXIT: u32 = 2;
     pub(crate) static SYS_YIELD: u32 = 3;
     pub(crate) static SYS_GET_ENV_ID: u32 = 4;
+    pub(crate) static SYS_FORK: u32 = 5;
 }
 
 fn sys_cputs(s: &str) {
@@ -27,6 +28,11 @@ fn sys_yield() {
 fn sys_get_env_id() -> EnvId {
     let cur_env = env::cur_env().unwrap();
     cur_env.get_env_id()
+}
+
+fn sys_fork() -> EnvId {
+    let cur_env = env::cur_env_mut().unwrap();
+    env::fork(cur_env)
 }
 
 /// Dispatched to the correct kernel function, passing the arguments.
@@ -63,6 +69,9 @@ pub(crate) unsafe fn syscall(
         0
     } else if syscall_no == SYS_GET_ENV_ID {
         let env_id = sys_get_env_id();
+        env_id.0 as i32
+    } else if syscall_no == SYS_FORK {
+        let env_id = sys_fork();
         env_id.0 as i32
     } else {
         panic!("unknown syscall");

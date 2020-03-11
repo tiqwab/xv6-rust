@@ -11,6 +11,7 @@
 #define SYS_EXIT 2
 #define SYS_YIELD 3
 #define SYS_GET_ENV_ID 4
+#define SYS_FORK 5
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -54,4 +55,8 @@ void sys_yield(void) {
 
 int sys_get_env_id(void) {
     return syscall(SYS_GET_ENV_ID, 0, 0, 0, 0, 0);
+}
+
+int sys_fork(void) {
+    return syscall(SYS_FORK, 0, 0, 0, 0, 0);
 }
