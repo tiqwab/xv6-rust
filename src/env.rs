@@ -372,73 +372,99 @@ fn env_setup_vm() -> Box<PageDirectory> {
     PageDirectory::new_for_user()
 }
 
-/// Allocates a new env with env_alloc, loads the named elf
-/// binary into it with load_icode, and sets its env_type.
-/// This function is ONLY called during kernel initialization,
-/// before running the first user-mode environment.
-/// The new env's parent ID is set to 0.
-pub(crate) fn env_create_for_hello(env_table: &mut EnvTable) -> EnvId {
-    extern "C" {
-        static _binary_obj_user_hello_start: u8;
-        static _binary_obj_user_hello_end: u8;
-        static _binary_obj_user_hello_size: usize;
+pub(crate) use temporary::*;
+
+mod temporary {
+    use crate::env::*;
+
+    /// Allocates a new env with env_alloc, loads the named elf
+    /// binary into it with load_icode, and sets its env_type.
+    /// This function is ONLY called during kernel initialization,
+    /// before running the first user-mode environment.
+    /// The new env's parent ID is set to 0.
+    pub(crate) fn env_create_for_hello(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_hello_start: u8;
+            static _binary_obj_user_hello_end: u8;
+            static _binary_obj_user_hello_size: usize;
+        }
+
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+
+        unsafe {
+            let user_hello_start = &_binary_obj_user_hello_start as *const u8;
+            let user_hello_end = &_binary_obj_user_hello_end as *const u8;
+            let user_hello_size = &_binary_obj_user_hello_size as *const usize;
+
+            println!("_binary_obj_user_hello_start: {:?}", user_hello_start);
+            println!("_binary_obj_user_hello_end: {:?}", user_hello_end);
+            println!("_binary_obj_user_hello_size: {:?}", user_hello_size);
+
+            env_table.load_icode(env_id, user_hello_start);
+        }
+
+        env_id
     }
 
-    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+    pub(crate) fn env_create_for_yield(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_yield_start: u8;
+            static _binary_obj_user_yield_end: u8;
+            static _binary_obj_user_yield_size: usize;
+        }
 
-    unsafe {
-        let user_hello_start = &_binary_obj_user_hello_start as *const u8;
-        let user_hello_end = &_binary_obj_user_hello_end as *const u8;
-        let user_hello_size = &_binary_obj_user_hello_size as *const usize;
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
 
-        println!("_binary_obj_user_hello_start: {:?}", user_hello_start);
-        println!("_binary_obj_user_hello_end: {:?}", user_hello_end);
-        println!("_binary_obj_user_hello_size: {:?}", user_hello_size);
+        unsafe {
+            let user_yield_start = &_binary_obj_user_yield_start as *const u8;
+            let _user_yield_end = &_binary_obj_user_yield_end as *const u8;
+            let _user_yield_size = &_binary_obj_user_yield_size as *const usize;
 
-        env_table.load_icode(env_id, user_hello_start);
+            env_table.load_icode(env_id, user_yield_start);
+        }
+
+        env_id
     }
 
-    env_id
-}
+    pub(crate) fn env_create_for_forktest(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_forktest_start: u8;
+            static _binary_obj_user_forktest_end: u8;
+            static _binary_obj_user_forktest_size: usize;
+        }
 
-pub(crate) fn env_create_for_yield(env_table: &mut EnvTable) -> EnvId {
-    extern "C" {
-        static _binary_obj_user_yield_start: u8;
-        static _binary_obj_user_yield_end: u8;
-        static _binary_obj_user_yield_size: usize;
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+
+        unsafe {
+            let user_forktest_start = &_binary_obj_user_forktest_start as *const u8;
+            let _user_forktest_end = &_binary_obj_user_forktest_end as *const u8;
+            let _user_forktest_size = &_binary_obj_user_forktest_size as *const usize;
+
+            env_table.load_icode(env_id, user_forktest_start);
+        }
+
+        env_id
     }
 
-    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+    pub(crate) fn env_create_for_spin(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_spin_start: u8;
+            static _binary_obj_user_spin_end: u8;
+            static _binary_obj_user_spin_size: usize;
+        }
 
-    unsafe {
-        let user_yield_start = &_binary_obj_user_yield_start as *const u8;
-        let _user_yield_end = &_binary_obj_user_yield_end as *const u8;
-        let _user_yield_size = &_binary_obj_user_yield_size as *const usize;
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
 
-        env_table.load_icode(env_id, user_yield_start);
+        unsafe {
+            let user_spin_start = &_binary_obj_user_spin_start as *const u8;
+            let _user_spin_end = &_binary_obj_user_spin_end as *const u8;
+            let _user_spin_size = &_binary_obj_user_spin_size as *const usize;
+
+            env_table.load_icode(env_id, user_spin_start);
+        }
+
+        env_id
     }
-
-    env_id
-}
-
-pub(crate) fn env_create_for_forktest(env_table: &mut EnvTable) -> EnvId {
-    extern "C" {
-        static _binary_obj_user_forktest_start: u8;
-        static _binary_obj_user_forktest_end: u8;
-        static _binary_obj_user_forktest_size: usize;
-    }
-
-    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
-
-    unsafe {
-        let user_forktest_start = &_binary_obj_user_forktest_start as *const u8;
-        let _user_forktest_end = &_binary_obj_user_forktest_end as *const u8;
-        let _user_forktest_size = &_binary_obj_user_forktest_size as *const usize;
-
-        env_table.load_icode(env_id, user_forktest_start);
-    }
-
-    env_id
 }
 
 /// Restores the register values in the Trapframe with the 'iret' instruction.

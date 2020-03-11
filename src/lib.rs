@@ -97,10 +97,14 @@ pub fn lib_main() {
     {
         let mut env_table = env::env_table();
         env::env_create_for_hello(&mut env_table);
+
         // env::env_create_for_yield(&mut env_table);
         // env::env_create_for_yield(&mut env_table);
         // env::env_create_for_yield(&mut env_table);
-        env::env_create_for_forktest(&mut env_table);
+
+        // env::env_create_for_forktest(&mut env_table);
+
+        env::env_create_for_spin(&mut env_table);
     }
 
     mp::boot_aps();

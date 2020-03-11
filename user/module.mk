@@ -3,6 +3,7 @@ UPROGS += \
 	$(OBJDIR)/user/hello \
 	$(OBJDIR)/user/yield \
 	$(OBJDIR)/user/forktest \
+	$(OBJDIR)/user/spin \
 
 include user/lib/module.mk
 

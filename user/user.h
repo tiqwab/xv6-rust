@@ -13,6 +13,7 @@ void sys_exit(int status);
 void sys_yield(void);
 int sys_get_env_id(void);
 int sys_fork(void);
+void sys_kill(int pid);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
