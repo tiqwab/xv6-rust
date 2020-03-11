@@ -6,6 +6,7 @@ use crate::constants::*;
 use crate::kclock;
 use crate::mpconfig::consts::MAX_NUM_CPU;
 use crate::spinlock::Mutex;
+use crate::util;
 use crate::x86;
 use alloc::boxed::Box;
 
@@ -528,6 +529,33 @@ impl PageDirectory {
 
         return Ok(());
     }
+
+    /// Copy src's pages in user region to self.
+    ///
+    /// FIXME: this might be inefficient because all of the present mappings are eagerly copied.
+    pub(crate) fn copy_uvm(&mut self, src: &mut PageDirectory) {
+        let mut va = VirtAddr(0);
+        let end_va = VirtAddr(UTOP);
+        let mut allocator = PAGE_ALLOCATOR.lock();
+
+        while va < end_va {
+            if let Some(pte) = src.walk(va, false, &mut allocator) {
+                if pte.exists() {
+                    // println!("copy va(0x{:x})", va.0);
+                    // Map a new page to self.
+                    let attr = pte.attr();
+                    let pa = allocator.alloc(AllocFlag::None).unwrap();
+                    self.insert(pa, va, attr, &mut allocator);
+
+                    // Copy memory.
+                    // Note that virtual addresses are handled in the parent page mapping (... is it right?)
+                    // unsafe { util::memmove(pa.to_va(), va, PGSIZE as usize) };
+                    unsafe { util::memmove(pa.to_va(), pte.addr().to_va(), PGSIZE as usize) };
+                }
+            }
+            va += PGSIZE;
+        }
+    }
 }
 
 impl Index<usize> for PageDirectory {
@@ -976,12 +1004,12 @@ impl PageAllocator {
             self.page_free_list = (*pp).pp_link;
 
             match flag {
-                AllocFlag::AllocZero => {}
+                AllocFlag::AllocZero => {
+                    let va: *mut u8 = self.to_pa(pp).to_va().as_mut_ptr();
+                    core::intrinsics::write_bytes(va, 0, PGSIZE as usize);
+                }
                 _ => {}
             }
-            // if (alloc_flags & ALLOC_ZERO) {
-            //     memset(page2kva(pp), 0, PGSIZE);
-            // }
 
             (*pp).pp_ref = 0;
             (*pp).pp_link = null_mut();

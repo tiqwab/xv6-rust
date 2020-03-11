@@ -318,6 +318,29 @@ impl EnvTable {
             }
         }
     }
+
+    /// Create a new process copying p as the parent.
+    /// Sets up stack to return as if from system call.
+    /// Caller must set state of returned proc to RUNNABLE.
+    ///
+    /// ref. fork() in proc.c (xv6)
+    fn fork(&mut self, parent: &mut Env) -> EnvId {
+        // Allocate process.
+        let new_env_id = self.env_alloc(parent.env_id, EnvType::User);
+        let new_env = self.find(new_env_id).unwrap();
+
+        // Copy process state from parent.
+        new_env.env_pgdir.copy_uvm(&mut parent.env_pgdir);
+
+        new_env.env_tf = parent.env_tf;
+
+        // Clear %eax so that fork returns 0 in the child.
+        new_env.env_tf.tf_regs.reg_eax = 0;
+
+        // TODO: Duplicate open file descriptors here.
+
+        new_env_id
+    }
 }
 
 static ENV_TABLE: Mutex<EnvTable> = Mutex::new(EnvTable {
@@ -393,6 +416,26 @@ pub(crate) fn env_create_for_yield(env_table: &mut EnvTable) -> EnvId {
         let _user_yield_size = &_binary_obj_user_yield_size as *const usize;
 
         env_table.load_icode(env_id, user_yield_start);
+    }
+
+    env_id
+}
+
+pub(crate) fn env_create_for_forktest(env_table: &mut EnvTable) -> EnvId {
+    extern "C" {
+        static _binary_obj_user_forktest_start: u8;
+        static _binary_obj_user_forktest_end: u8;
+        static _binary_obj_user_forktest_size: usize;
+    }
+
+    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+
+    unsafe {
+        let user_forktest_start = &_binary_obj_user_forktest_start as *const u8;
+        let _user_forktest_end = &_binary_obj_user_forktest_end as *const u8;
+        let _user_forktest_size = &_binary_obj_user_forktest_size as *const usize;
+
+        env_table.load_icode(env_id, user_forktest_start);
     }
 
     env_id
@@ -485,4 +528,9 @@ pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32
         let env_table = env_table();
         env_destroy(env, env_table);
     }
+}
+
+pub(crate) fn fork(parent: &mut Env) -> EnvId {
+    let mut env_table = env_table();
+    env_table.fork(parent)
 }
