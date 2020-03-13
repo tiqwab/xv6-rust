@@ -27,6 +27,7 @@ mod kernel_lock;
 mod lapic;
 mod mp;
 mod mpconfig;
+mod picirq;
 mod pmap;
 mod sched;
 pub mod serial;
@@ -89,6 +90,8 @@ pub fn lib_main() {
         lapic::lapic_init();
         // do mp::boot_aps() after preparing processes
     }
+
+    picirq::pic_init();
 
     print!("H");
     println!("ello");
