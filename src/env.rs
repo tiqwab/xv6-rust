@@ -534,6 +534,7 @@ pub(crate) fn env_destroy(env: &mut Env, mut env_table: MutexGuard<EnvTable>) {
     unsafe { env_table.env_free(env) };
 
     if is_myself {
+        mpconfig::this_cpu_mut().unset_env();
         drop(env_table);
         sched::sched_yield();
     }
