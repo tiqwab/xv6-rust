@@ -118,7 +118,18 @@ impl EnvTable {
         EnvId(res)
     }
 
-    fn find(&mut self, env_id: EnvId) -> Option<&mut Env> {
+    fn find(&self, env_id: EnvId) -> Option<&Env> {
+        for env_opt in self.envs.iter() {
+            if let Some(env) = env_opt {
+                if env.get_env_id() == env_id {
+                    return Some(env);
+                }
+            }
+        }
+        None
+    }
+
+    fn find_mut(&mut self, env_id: EnvId) -> Option<&mut Env> {
         for env_opt in &mut self.envs.iter_mut() {
             if let Some(env) = env_opt {
                 if env.get_env_id() == env_id {
@@ -226,7 +237,7 @@ impl EnvTable {
     ///
     /// Finally, this function maps one page for the program's initial stack.
     unsafe fn load_icode(&mut self, env_id: EnvId, binary: *const u8) {
-        let env = self.find(env_id).expect("illegal env_id");
+        let env = self.find_mut(env_id).expect("illegal env_id");
 
         let elf = ElfParser::new(binary).expect("binary is not elf");
 
@@ -270,7 +281,9 @@ impl EnvTable {
     }
 
     /// Frees env and all memory it uses.
-    pub(crate) unsafe fn env_free(&mut self, env: &mut Env) {
+    unsafe fn env_free(&mut self, env_id: EnvId) {
+        let env = self.find_mut(env_id).expect("illegal env_id");
+
         // If freeing the current environment, switch to kern_pgdir
         // before freeing the page directory, just in case the page
         // gets reused.
@@ -311,7 +324,7 @@ impl EnvTable {
 
         for entry_opt in self.envs.iter_mut() {
             match entry_opt {
-                Some(entry) if entry.env_id == env.env_id => {
+                Some(entry) if entry.env_id == env_id => {
                     *entry_opt = None;
                 }
                 _ => (),
@@ -327,7 +340,7 @@ impl EnvTable {
     fn fork(&mut self, parent: &mut Env) -> EnvId {
         // Allocate process.
         let new_env_id = self.env_alloc(parent.env_id, EnvType::User);
-        let new_env = self.find(new_env_id).unwrap();
+        let new_env = self.find_mut(new_env_id).unwrap();
 
         // Copy process state from parent.
         new_env.env_pgdir.copy_uvm(&mut parent.env_pgdir);
@@ -497,7 +510,7 @@ pub(crate) fn env_run(env_id: EnvId, mut table: MutexGuard<EnvTable>) -> ! {
         cur.pause();
     }
 
-    let env = (*table).find(env_id).unwrap();
+    let env = (*table).find_mut(env_id).unwrap();
     let env_tf = &env.env_tf as *const Trapframe;
 
     env.resume();
@@ -514,7 +527,9 @@ pub(crate) fn env_run(env_id: EnvId, mut table: MutexGuard<EnvTable>) -> ! {
 ///
 /// If env was the current env, then runs a new environment (and does not
 /// return to the caller).
-pub(crate) fn env_destroy(env: &mut Env, mut env_table: MutexGuard<EnvTable>) {
+pub(crate) fn env_destroy(env_id: EnvId, mut env_table: MutexGuard<EnvTable>) {
+    let env = env_table.find_mut(env_id).expect("illegal env_id");
+
     let is_myself = if let Some(cur_env) = cur_env() {
         cur_env.get_env_id() == env.get_env_id()
     } else {
@@ -525,18 +540,15 @@ pub(crate) fn env_destroy(env: &mut Env, mut env_table: MutexGuard<EnvTable>) {
     // ENV_DYING. A zombie environment will be freed the next time
     // it traps to the kernel.
     if env.is_running() && !is_myself {
-        if env.is_running() {
-            env.die();
-            return;
+        env.die();
+    } else {
+        unsafe { env_table.env_free(env_id) };
+
+        if is_myself {
+            mpconfig::this_cpu_mut().unset_env();
+            drop(env_table);
+            sched::sched_yield();
         }
-    }
-
-    unsafe { env_table.env_free(env) };
-
-    if is_myself {
-        mpconfig::this_cpu_mut().unset_env();
-        drop(env_table);
-        sched::sched_yield();
     }
 }
 
@@ -553,7 +565,7 @@ pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32
         );
 
         let env_table = env_table();
-        env_destroy(env, env_table);
+        env_destroy(env.get_env_id(), env_table);
     }
 }
 

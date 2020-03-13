@@ -364,8 +364,7 @@ fn trap_dispatch(tf: &mut Trapframe) {
     // Handle processor exceptions.
     if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
         lapic::eoi();
-    // TODO: Uncomment the below to enable preemptive scheduling
-    // sched::sched_yield();
+        sched::sched_yield();
     } else if tf.tf_trapno == T_SYSCALL {
         unsafe {
             let ret = syscall::syscall(
@@ -388,7 +387,7 @@ fn trap_dispatch(tf: &mut Trapframe) {
         } else {
             let curenv = env::cur_env_mut().expect("there is no running Env");
             let env_table = env::env_table();
-            env::env_destroy(curenv, env_table);
+            env::env_destroy(curenv.get_env_id(), env_table);
         }
     }
 }
@@ -418,7 +417,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
 
         if curenv.is_dying() {
             let env_table = env::env_table();
-            env::env_destroy(curenv, env_table);
+            env::env_destroy(curenv.get_env_id(), env_table);
         }
 
         // Copy trap frame (which is currently on the stack)

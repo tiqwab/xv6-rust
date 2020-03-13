@@ -35,5 +35,6 @@ pub(crate) fn sched_yield() -> ! {
 pub(crate) fn sched_halt(table: MutexGuard<EnvTable>) -> ! {
     println!("sched_halt: there is no runnable envs.");
     drop(table);
+    // TODO
     loop {}
 }

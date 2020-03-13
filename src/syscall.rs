@@ -15,6 +15,7 @@ mod consts {
     pub(crate) static SYS_YIELD: u32 = 3;
     pub(crate) static SYS_GET_ENV_ID: u32 = 4;
     pub(crate) static SYS_FORK: u32 = 5;
+    pub(crate) static SYS_KILL: u32 = 6;
 }
 
 fn sys_cputs(s: &str) {
@@ -62,7 +63,7 @@ pub(crate) unsafe fn syscall(
         let curenv = env::cur_env_mut().expect("curenv should be exist");
         println!("[{:08x}] exiting gracefully", curenv.get_env_id());
         let env_table = env::env_table();
-        env::env_destroy(curenv, env_table);
+        env::env_destroy(curenv.get_env_id(), env_table);
         0
     } else if syscall_no == SYS_YIELD {
         sys_yield();
@@ -73,6 +74,11 @@ pub(crate) unsafe fn syscall(
     } else if syscall_no == SYS_FORK {
         let env_id = sys_fork();
         env_id.0 as i32
+    } else if syscall_no == SYS_KILL {
+        let env_id = EnvId(a1);
+        let env_table = env::env_table();
+        env::env_destroy(env_id, env_table);
+        0
     } else {
         panic!("unknown syscall");
     }
