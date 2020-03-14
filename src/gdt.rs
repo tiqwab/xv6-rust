@@ -135,43 +135,43 @@ impl SegDesc {
 // #[repr(C, packed, align(16))]
 #[repr(C)]
 pub(crate) struct TaskState {
-    ts_link: u32,      // Old ts selector
-    ts_esp0: VirtAddr, // Stack pointers and segment selectors
-    ts_ss0: u16,       // after an increate in privilege level
-    ts_padding1: u16,
-    ts_esp1: VirtAddr,
-    ts_ss1: u16,
-    ts_padding2: u16,
-    ts_esp2: VirtAddr,
-    ts_ss2: u16,
-    ts_padding3: u16,
-    ts_cr3: PhysAddr, // Page directory base
-    ts_eip: VirtAddr, // Saved state from last task switch
-    ts_eflags: u32,
-    ts_eax: u32, // More saved state (registers)
-    ts_ecx: u32,
-    ts_edx: u32,
-    ts_ebx: u32,
-    ts_esp: VirtAddr,
-    ts_ebp: VirtAddr,
-    ts_esi: u32,
-    ts_edi: u32,
-    ts_es: u16, // Even more saved state (segment selectors)
-    ts_padding4: u16,
-    ts_cs: u16,
-    ts_padding5: u16,
-    ts_ss: u16,
-    ts_padding6: u16,
-    ts_ds: u16,
-    ts_padding7: u16,
-    ts_fs: u16,
-    ts_padding8: u16,
-    ts_gs: u16,
-    ts_padding9: u16,
-    ts_ldt: u16,
-    ts_padding10: u16,
-    ts_t: u16,    // Trap on task switch
-    ts_iomb: u16, // I/O map base address. Offset from the beginning of the TaskState
+    pub(crate) ts_link: u32,      // Old ts selector
+    pub(crate) ts_esp0: VirtAddr, // Stack pointers and segment selectors
+    pub(crate) ts_ss0: u16,       // after an increate in privilege level
+    pub(crate) ts_padding1: u16,
+    pub(crate) ts_esp1: VirtAddr,
+    pub(crate) ts_ss1: u16,
+    pub(crate) ts_padding2: u16,
+    pub(crate) ts_esp2: VirtAddr,
+    pub(crate) ts_ss2: u16,
+    pub(crate) ts_padding3: u16,
+    pub(crate) ts_cr3: PhysAddr, // Page directory base
+    pub(crate) ts_eip: VirtAddr, // Saved state from last task switch
+    pub(crate) ts_eflags: u32,
+    pub(crate) ts_eax: u32, // More saved state (registers)
+    pub(crate) ts_ecx: u32,
+    pub(crate) ts_edx: u32,
+    pub(crate) ts_ebx: u32,
+    pub(crate) ts_esp: VirtAddr,
+    pub(crate) ts_ebp: VirtAddr,
+    pub(crate) ts_esi: u32,
+    pub(crate) ts_edi: u32,
+    pub(crate) ts_es: u16, // Even more saved state (segment selectors)
+    pub(crate) ts_padding4: u16,
+    pub(crate) ts_cs: u16,
+    pub(crate) ts_padding5: u16,
+    pub(crate) ts_ss: u16,
+    pub(crate) ts_padding6: u16,
+    pub(crate) ts_ds: u16,
+    pub(crate) ts_padding7: u16,
+    pub(crate) ts_fs: u16,
+    pub(crate) ts_padding8: u16,
+    pub(crate) ts_gs: u16,
+    pub(crate) ts_padding9: u16,
+    pub(crate) ts_ldt: u16,
+    pub(crate) ts_padding10: u16,
+    pub(crate) ts_t: u16,    // Trap on task switch
+    pub(crate) ts_iomb: u16, // I/O map base address. Offset from the beginning of the TaskState
 }
 
 impl TaskState {

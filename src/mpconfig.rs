@@ -249,6 +249,10 @@ impl CpuInfo {
     pub(crate) fn unset_env(&mut self) {
         self.cpu_env = null_mut();
     }
+
+    pub(crate) fn get_ts_esp0(&self) -> VirtAddr {
+        self.cpu_ts.ts_esp0
+    }
 }
 
 // Why it requires 4 bytes?
