@@ -27,6 +27,7 @@ mod kernel_lock;
 mod lapic;
 mod mp;
 mod mpconfig;
+mod picirq;
 mod pmap;
 mod sched;
 pub mod serial;
@@ -90,6 +91,8 @@ pub fn lib_main() {
         // do mp::boot_aps() after preparing processes
     }
 
+    picirq::pic_init();
+
     print!("H");
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);
@@ -97,10 +100,14 @@ pub fn lib_main() {
     {
         let mut env_table = env::env_table();
         env::env_create_for_hello(&mut env_table);
+
         // env::env_create_for_yield(&mut env_table);
         // env::env_create_for_yield(&mut env_table);
         // env::env_create_for_yield(&mut env_table);
-        env::env_create_for_forktest(&mut env_table);
+
+        // env::env_create_for_forktest(&mut env_table);
+
+        env::env_create_for_spin(&mut env_table);
     }
 
     mp::boot_aps();

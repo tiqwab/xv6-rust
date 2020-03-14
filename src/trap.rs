@@ -3,7 +3,7 @@ use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
 use crate::{env, gdt, sched, x86};
-use crate::{mpconfig, syscall};
+use crate::{lapic, mpconfig, syscall};
 use consts::*;
 use core::mem;
 use core::slice;
@@ -198,6 +198,8 @@ impl Trapframe {
         tf.tf_esp = USTACKTOP as usize;
         tf.tf_cs = GDT_USER_CODE | 3;
 
+        tf.tf_eflags |= FL_IF;
+
         tf
     }
 
@@ -232,7 +234,24 @@ pub(crate) unsafe fn trap_init() {
     IDT.0[17] = GateDesc::new(false, GDT_KERNEL_CODE, vs[17], 0);
     IDT.0[18] = GateDesc::new(false, GDT_KERNEL_CODE, vs[18], 0);
 
-    IDT.0[48] = GateDesc::new(true, GDT_KERNEL_CODE, vs[48], 3);
+    IDT.0[32] = GateDesc::new(false, GDT_KERNEL_CODE, vs[32], 0);
+    IDT.0[33] = GateDesc::new(false, GDT_KERNEL_CODE, vs[33], 0);
+    IDT.0[34] = GateDesc::new(false, GDT_KERNEL_CODE, vs[34], 0);
+    IDT.0[35] = GateDesc::new(false, GDT_KERNEL_CODE, vs[35], 0);
+    IDT.0[36] = GateDesc::new(false, GDT_KERNEL_CODE, vs[36], 0);
+    IDT.0[37] = GateDesc::new(false, GDT_KERNEL_CODE, vs[37], 0);
+    IDT.0[38] = GateDesc::new(false, GDT_KERNEL_CODE, vs[38], 0);
+    IDT.0[39] = GateDesc::new(false, GDT_KERNEL_CODE, vs[39], 0);
+    IDT.0[40] = GateDesc::new(false, GDT_KERNEL_CODE, vs[40], 0);
+    IDT.0[41] = GateDesc::new(false, GDT_KERNEL_CODE, vs[41], 0);
+    IDT.0[42] = GateDesc::new(false, GDT_KERNEL_CODE, vs[42], 0);
+    IDT.0[43] = GateDesc::new(false, GDT_KERNEL_CODE, vs[43], 0);
+    IDT.0[44] = GateDesc::new(false, GDT_KERNEL_CODE, vs[44], 0);
+    IDT.0[45] = GateDesc::new(false, GDT_KERNEL_CODE, vs[45], 0);
+    IDT.0[46] = GateDesc::new(false, GDT_KERNEL_CODE, vs[46], 0);
+    IDT.0[47] = GateDesc::new(false, GDT_KERNEL_CODE, vs[47], 0);
+
+    IDT.0[48] = GateDesc::new(false, GDT_KERNEL_CODE, vs[48], 3);
 
     trap_init_percpu();
 }
@@ -343,10 +362,11 @@ unsafe fn print_regs(regs: &PushRegs) {
 
 fn trap_dispatch(tf: &mut Trapframe) {
     // Handle processor exceptions.
-    match tf.tf_trapno {
-        // T_PGFLT => unimplemented!(),
-        // T_BRKPT => unimplemented!(),
-        T_SYSCALL => unsafe {
+    if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
+        lapic::eoi();
+        sched::sched_yield();
+    } else if tf.tf_trapno == T_SYSCALL {
+        unsafe {
             let ret = syscall::syscall(
                 tf.tf_regs.reg_eax,
                 tf.tf_regs.reg_edx,
@@ -356,19 +376,18 @@ fn trap_dispatch(tf: &mut Trapframe) {
                 tf.tf_regs.reg_esi,
             );
             tf.tf_regs.reg_eax = ret as u32;
-        },
-        _ => {
-            // Unexpected trap: The user process or the kernel has a bug.
-            unsafe {
-                print_trapframe(tf);
-            }
-            if tf.tf_cs == GDT_KERNEL_CODE {
-                panic!("unhandled trap in kernel")
-            } else {
-                let curenv = env::cur_env_mut().expect("there is no running Env");
-                let env_table = env::env_table();
-                env::env_destroy(curenv, env_table);
-            }
+        }
+    } else {
+        // Unexpected trap: The user process or the kernel has a bug.
+        unsafe {
+            print_trapframe(tf);
+        }
+        if tf.tf_cs == GDT_KERNEL_CODE {
+            panic!("unhandled trap in kernel")
+        } else {
+            let curenv = env::cur_env_mut().expect("there is no running Env");
+            let env_table = env::env_table();
+            env::env_destroy(curenv.get_env_id(), env_table);
         }
     }
 }
@@ -397,11 +416,8 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
         let curenv = env::cur_env_mut().expect("there is no running Env");
 
         if curenv.is_dying() {
-            {
-                let mut env_table = env::env_table();
-                unsafe { env_table.env_free(curenv) };
-            }
-            sched::sched_yield();
+            let env_table = env::env_table();
+            env::env_destroy(curenv.get_env_id(), env_table);
         }
 
         // Copy trap frame (which is currently on the stack)

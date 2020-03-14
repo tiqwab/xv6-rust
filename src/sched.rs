@@ -35,5 +35,21 @@ pub(crate) fn sched_yield() -> ! {
 pub(crate) fn sched_halt(table: MutexGuard<EnvTable>) -> ! {
     println!("sched_halt: there is no runnable envs.");
     drop(table);
-    loop {}
+
+    let cpu = mpconfig::this_cpu();
+    unsafe {
+        asm!(
+        "movl $0, %ebp; \
+        movl $0, %esp; \
+        pushl $0;
+        pushl $0;
+        sti;
+        1:
+        hlt
+        jmp 1b"
+        : : "{eax}" (cpu.get_ts_esp0().0) : "memory" : "volatile"
+        );
+    }
+
+    panic!("sched_halt: should not be come here");
 }

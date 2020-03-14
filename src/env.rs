@@ -118,7 +118,18 @@ impl EnvTable {
         EnvId(res)
     }
 
-    fn find(&mut self, env_id: EnvId) -> Option<&mut Env> {
+    fn find(&self, env_id: EnvId) -> Option<&Env> {
+        for env_opt in self.envs.iter() {
+            if let Some(env) = env_opt {
+                if env.get_env_id() == env_id {
+                    return Some(env);
+                }
+            }
+        }
+        None
+    }
+
+    fn find_mut(&mut self, env_id: EnvId) -> Option<&mut Env> {
         for env_opt in &mut self.envs.iter_mut() {
             if let Some(env) = env_opt {
                 if env.get_env_id() == env_id {
@@ -226,7 +237,7 @@ impl EnvTable {
     ///
     /// Finally, this function maps one page for the program's initial stack.
     unsafe fn load_icode(&mut self, env_id: EnvId, binary: *const u8) {
-        let env = self.find(env_id).expect("illegal env_id");
+        let env = self.find_mut(env_id).expect("illegal env_id");
 
         let elf = ElfParser::new(binary).expect("binary is not elf");
 
@@ -270,7 +281,9 @@ impl EnvTable {
     }
 
     /// Frees env and all memory it uses.
-    pub(crate) unsafe fn env_free(&mut self, env: &mut Env) {
+    unsafe fn env_free(&mut self, env_id: EnvId) {
+        let env = self.find_mut(env_id).expect("illegal env_id");
+
         // If freeing the current environment, switch to kern_pgdir
         // before freeing the page directory, just in case the page
         // gets reused.
@@ -311,7 +324,7 @@ impl EnvTable {
 
         for entry_opt in self.envs.iter_mut() {
             match entry_opt {
-                Some(entry) if entry.env_id == env.env_id => {
+                Some(entry) if entry.env_id == env_id => {
                     *entry_opt = None;
                 }
                 _ => (),
@@ -327,7 +340,7 @@ impl EnvTable {
     fn fork(&mut self, parent: &mut Env) -> EnvId {
         // Allocate process.
         let new_env_id = self.env_alloc(parent.env_id, EnvType::User);
-        let new_env = self.find(new_env_id).unwrap();
+        let new_env = self.find_mut(new_env_id).unwrap();
 
         // Copy process state from parent.
         new_env.env_pgdir.copy_uvm(&mut parent.env_pgdir);
@@ -372,73 +385,99 @@ fn env_setup_vm() -> Box<PageDirectory> {
     PageDirectory::new_for_user()
 }
 
-/// Allocates a new env with env_alloc, loads the named elf
-/// binary into it with load_icode, and sets its env_type.
-/// This function is ONLY called during kernel initialization,
-/// before running the first user-mode environment.
-/// The new env's parent ID is set to 0.
-pub(crate) fn env_create_for_hello(env_table: &mut EnvTable) -> EnvId {
-    extern "C" {
-        static _binary_obj_user_hello_start: u8;
-        static _binary_obj_user_hello_end: u8;
-        static _binary_obj_user_hello_size: usize;
+pub(crate) use temporary::*;
+
+mod temporary {
+    use crate::env::*;
+
+    /// Allocates a new env with env_alloc, loads the named elf
+    /// binary into it with load_icode, and sets its env_type.
+    /// This function is ONLY called during kernel initialization,
+    /// before running the first user-mode environment.
+    /// The new env's parent ID is set to 0.
+    pub(crate) fn env_create_for_hello(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_hello_start: u8;
+            static _binary_obj_user_hello_end: u8;
+            static _binary_obj_user_hello_size: usize;
+        }
+
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+
+        unsafe {
+            let user_hello_start = &_binary_obj_user_hello_start as *const u8;
+            let user_hello_end = &_binary_obj_user_hello_end as *const u8;
+            let user_hello_size = &_binary_obj_user_hello_size as *const usize;
+
+            println!("_binary_obj_user_hello_start: {:?}", user_hello_start);
+            println!("_binary_obj_user_hello_end: {:?}", user_hello_end);
+            println!("_binary_obj_user_hello_size: {:?}", user_hello_size);
+
+            env_table.load_icode(env_id, user_hello_start);
+        }
+
+        env_id
     }
 
-    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+    pub(crate) fn env_create_for_yield(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_yield_start: u8;
+            static _binary_obj_user_yield_end: u8;
+            static _binary_obj_user_yield_size: usize;
+        }
 
-    unsafe {
-        let user_hello_start = &_binary_obj_user_hello_start as *const u8;
-        let user_hello_end = &_binary_obj_user_hello_end as *const u8;
-        let user_hello_size = &_binary_obj_user_hello_size as *const usize;
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
 
-        println!("_binary_obj_user_hello_start: {:?}", user_hello_start);
-        println!("_binary_obj_user_hello_end: {:?}", user_hello_end);
-        println!("_binary_obj_user_hello_size: {:?}", user_hello_size);
+        unsafe {
+            let user_yield_start = &_binary_obj_user_yield_start as *const u8;
+            let _user_yield_end = &_binary_obj_user_yield_end as *const u8;
+            let _user_yield_size = &_binary_obj_user_yield_size as *const usize;
 
-        env_table.load_icode(env_id, user_hello_start);
+            env_table.load_icode(env_id, user_yield_start);
+        }
+
+        env_id
     }
 
-    env_id
-}
+    pub(crate) fn env_create_for_forktest(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_forktest_start: u8;
+            static _binary_obj_user_forktest_end: u8;
+            static _binary_obj_user_forktest_size: usize;
+        }
 
-pub(crate) fn env_create_for_yield(env_table: &mut EnvTable) -> EnvId {
-    extern "C" {
-        static _binary_obj_user_yield_start: u8;
-        static _binary_obj_user_yield_end: u8;
-        static _binary_obj_user_yield_size: usize;
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+
+        unsafe {
+            let user_forktest_start = &_binary_obj_user_forktest_start as *const u8;
+            let _user_forktest_end = &_binary_obj_user_forktest_end as *const u8;
+            let _user_forktest_size = &_binary_obj_user_forktest_size as *const usize;
+
+            env_table.load_icode(env_id, user_forktest_start);
+        }
+
+        env_id
     }
 
-    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+    pub(crate) fn env_create_for_spin(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_spin_start: u8;
+            static _binary_obj_user_spin_end: u8;
+            static _binary_obj_user_spin_size: usize;
+        }
 
-    unsafe {
-        let user_yield_start = &_binary_obj_user_yield_start as *const u8;
-        let _user_yield_end = &_binary_obj_user_yield_end as *const u8;
-        let _user_yield_size = &_binary_obj_user_yield_size as *const usize;
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
 
-        env_table.load_icode(env_id, user_yield_start);
+        unsafe {
+            let user_spin_start = &_binary_obj_user_spin_start as *const u8;
+            let _user_spin_end = &_binary_obj_user_spin_end as *const u8;
+            let _user_spin_size = &_binary_obj_user_spin_size as *const usize;
+
+            env_table.load_icode(env_id, user_spin_start);
+        }
+
+        env_id
     }
-
-    env_id
-}
-
-pub(crate) fn env_create_for_forktest(env_table: &mut EnvTable) -> EnvId {
-    extern "C" {
-        static _binary_obj_user_forktest_start: u8;
-        static _binary_obj_user_forktest_end: u8;
-        static _binary_obj_user_forktest_size: usize;
-    }
-
-    let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
-
-    unsafe {
-        let user_forktest_start = &_binary_obj_user_forktest_start as *const u8;
-        let _user_forktest_end = &_binary_obj_user_forktest_end as *const u8;
-        let _user_forktest_size = &_binary_obj_user_forktest_size as *const usize;
-
-        env_table.load_icode(env_id, user_forktest_start);
-    }
-
-    env_id
 }
 
 /// Restores the register values in the Trapframe with the 'iret' instruction.
@@ -471,7 +510,7 @@ pub(crate) fn env_run(env_id: EnvId, mut table: MutexGuard<EnvTable>) -> ! {
         cur.pause();
     }
 
-    let env = (*table).find(env_id).unwrap();
+    let env = (*table).find_mut(env_id).unwrap();
     let env_tf = &env.env_tf as *const Trapframe;
 
     env.resume();
@@ -488,7 +527,9 @@ pub(crate) fn env_run(env_id: EnvId, mut table: MutexGuard<EnvTable>) -> ! {
 ///
 /// If env was the current env, then runs a new environment (and does not
 /// return to the caller).
-pub(crate) fn env_destroy(env: &mut Env, mut env_table: MutexGuard<EnvTable>) {
+pub(crate) fn env_destroy(env_id: EnvId, mut env_table: MutexGuard<EnvTable>) {
+    let env = env_table.find_mut(env_id).expect("illegal env_id");
+
     let is_myself = if let Some(cur_env) = cur_env() {
         cur_env.get_env_id() == env.get_env_id()
     } else {
@@ -499,17 +540,15 @@ pub(crate) fn env_destroy(env: &mut Env, mut env_table: MutexGuard<EnvTable>) {
     // ENV_DYING. A zombie environment will be freed the next time
     // it traps to the kernel.
     if env.is_running() && !is_myself {
-        if env.is_running() {
-            env.die();
-            return;
+        env.die();
+    } else {
+        unsafe { env_table.env_free(env_id) };
+
+        if is_myself {
+            mpconfig::this_cpu_mut().unset_env();
+            drop(env_table);
+            sched::sched_yield();
         }
-    }
-
-    unsafe { env_table.env_free(env) };
-
-    if is_myself {
-        drop(env_table);
-        sched::sched_yield();
     }
 }
 
@@ -526,7 +565,7 @@ pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32
         );
 
         let env_table = env_table();
-        env_destroy(env, env_table);
+        env_destroy(env.get_env_id(), env_table);
     }
 }
 

@@ -242,8 +242,16 @@ impl CpuInfo {
         unsafe { self.cpu_env.as_mut() }
     }
 
-    pub(crate) fn set_env(&mut self, env: *mut Env) {
+    pub(crate) fn set_env(&mut self, env: &mut Env) {
         self.cpu_env = env;
+    }
+
+    pub(crate) fn unset_env(&mut self) {
+        self.cpu_env = null_mut();
+    }
+
+    pub(crate) fn get_ts_esp0(&self) -> VirtAddr {
+        self.cpu_ts.ts_esp0
     }
 }
 
