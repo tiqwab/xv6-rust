@@ -50,16 +50,18 @@ GDBPORT	:= 12345
 
 CPUS ?= 1
 
-# Enter QEMU monitor by 'Ctrl+a then c' if -serial mon:stdio is specified
-# ref. https://kashyapc.wordpress.com/2016/02/11/qemu-command-line-behavior-of-serial-stdio-vs-serial-monstdio/
-QEMUOPTS := $(QEMUOPTS)
-QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT) -smp $(CPUS)
-QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
-
 UPROGS :=
 
 include boot/module.mk
 include user/module.mk
+include fs/module.mk
+
+# Enter QEMU monitor by 'Ctrl+a then c' if -serial mon:stdio is specified
+# ref. https://kashyapc.wordpress.com/2016/02/11/qemu-command-line-behavior-of-serial-stdio-vs-serial-monstdio/
+QEMUOPTS := $(QEMUOPTS)
+QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT) -smp $(CPUS)
+QEMUOPTS += -drive file=$(FS_IMAGE),index=1,media=disk,format=raw
+QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 
 default: all
 
@@ -72,13 +74,13 @@ gdb:
 	$(GDB) -n -x .gdbinit
 
 # qemu: $(IMAGES) pre-qemu
-qemu: image
+qemu: image $(FS_IMAGE)
 	$(QEMU) $(QEMUOPTS)
 
-qemu-gdb: image .gdbinit
+qemu-gdb: image $(FS_IMAGE) .gdbinit
 	$(QEMU) $(QEMUOPTS) -S
 
-test: test-image
+test: test-image $(FS_IMAGE)
 	$(QEMU) $(QEMUOPTS)
 
 KERN_BINARY := target/i686-xv6rust/debug/xv6-rust
