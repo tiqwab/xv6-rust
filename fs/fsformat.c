@@ -24,7 +24,9 @@ typedef unsigned int uint32_t;
 #define NINODES 200
 
 // Disk layout:
-// [ boot block | sb block | log | inode blocks | free bit map | data blocks ]
+// name (# of blocks)
+// [ boot block (1) | sb block (1) | log (sb.nlog = LOGSIZE) |
+//   inode blocks (sb.ninodes) | free bit map (nbitmap) | data blocks (sb.nblocks) ]
 
 int nbitmap = FSSIZE/(BLKSIZE*8) + 1;
 int ninodeblocks = NINODES / IPB + 1;
@@ -48,9 +50,7 @@ uint ialloc(ushort type);
 void iappend(uint inum, void *p, uint n);
 
 // convert to intel byte order
-ushort
-xshort(ushort x)
-{
+ushort xshort(ushort x) {
   ushort y;
   uchar *a = (uchar*)&y;
   a[0] = x;
@@ -58,9 +58,7 @@ xshort(ushort x)
   return y;
 }
 
-uint
-xint(uint x)
-{
+uint xint(uint x) {
   uint y;
   uchar *a = (uchar*)&y;
   a[0] = x;
@@ -70,15 +68,12 @@ xint(uint x)
   return y;
 }
 
-int
-main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   int i, cc, fd;
   uint rootino, inum, off;
   struct dirent de;
   char buf[BLKSIZE];
   struct dinode din;
-
 
   static_assert(sizeof(int) == 4, "Integers must be 4 bytes!");
 
@@ -116,6 +111,7 @@ main(int argc, char *argv[])
   for(i = 0; i < FSSIZE; i++)
     wsect(i, zeroes);
 
+  // Write superblock
   memset(buf, 0, sizeof(buf));
   memmove(buf, &sb, sizeof(sb));
   wsect(1, buf);
@@ -123,36 +119,35 @@ main(int argc, char *argv[])
   rootino = ialloc(T_DIR);
   assert(rootino == ROOTINO);
 
-  bzero(&de, sizeof(de));
+  memset(&de, 0, sizeof(de));
   de.inum = xshort(rootino);
   strcpy(de.name, ".");
   iappend(rootino, &de, sizeof(de));
 
-  bzero(&de, sizeof(de));
+  memset(&de, 0, sizeof(de));
   de.inum = xshort(rootino);
   strcpy(de.name, "..");
   iappend(rootino, &de, sizeof(de));
 
   for(i = 2; i < argc; i++){
-    assert(index(argv[i], '/') == 0);
+    char *file_name = strrchr(argv[i], '/');
+    if (file_name == 0) {
+        file_name++;
+    } else {
+        file_name = argv[i];
+    }
+    assert(strnlen(file_name, DIRSIZ + 1) <= DIRSIZ);
 
     if((fd = open(argv[i], 0)) < 0){
       perror(argv[i]);
       exit(1);
     }
 
-    // Skip leading _ in name when writing to file system.
-    // The binaries are named _rm, _cat, etc. to keep the
-    // build operating system from trying to execute them
-    // in place of system binaries like rm and cat.
-    if(argv[i][0] == '_')
-      ++argv[i];
-
     inum = ialloc(T_FILE);
 
-    bzero(&de, sizeof(de));
+    memset(&de, 0, sizeof(de));
     de.inum = xshort(inum);
-    strncpy(de.name, argv[i], DIRSIZ);
+    strncpy(de.name, file_name, DIRSIZ);
     iappend(rootino, &de, sizeof(de));
 
     while((cc = read(fd, buf, sizeof(buf))) > 0)
@@ -173,9 +168,7 @@ main(int argc, char *argv[])
   exit(0);
 }
 
-void
-wsect(uint sec, void *buf)
-{
+void wsect(uint sec, void *buf) {
   if(lseek(fsfd, sec * BLKSIZE, 0) != sec * BLKSIZE){
     perror("lseek");
     exit(1);
@@ -186,9 +179,18 @@ wsect(uint sec, void *buf)
   }
 }
 
-void
-winode(uint inum, struct dinode *ip)
-{
+void rsect(uint sec, void *buf) {
+  if(lseek(fsfd, sec * BLKSIZE, 0) != sec * BLKSIZE){
+    perror("lseek");
+    exit(1);
+  }
+  if(read(fsfd, buf, BLKSIZE) != BLKSIZE){
+    perror("read");
+    exit(1);
+  }
+}
+
+void winode(uint inum, struct dinode *ip) {
   char buf[BLKSIZE];
   uint bn;
   struct dinode *dip;
@@ -200,9 +202,7 @@ winode(uint inum, struct dinode *ip)
   wsect(bn, buf);
 }
 
-void
-rinode(uint inum, struct dinode *ip)
-{
+void rinode(uint inum, struct dinode *ip) {
   char buf[BLKSIZE];
   uint bn;
   struct dinode *dip;
@@ -213,26 +213,11 @@ rinode(uint inum, struct dinode *ip)
   *ip = *dip;
 }
 
-void
-rsect(uint sec, void *buf)
-{
-  if(lseek(fsfd, sec * BLKSIZE, 0) != sec * BLKSIZE){
-    perror("lseek");
-    exit(1);
-  }
-  if(read(fsfd, buf, BLKSIZE) != BLKSIZE){
-    perror("read");
-    exit(1);
-  }
-}
-
-uint
-ialloc(ushort type)
-{
+uint ialloc(ushort type) {
   uint inum = freeinode++;
   struct dinode din;
 
-  bzero(&din, sizeof(din));
+  memset(&din, 0, sizeof(din));
   din.type = xshort(type);
   din.nlink = xshort(1);
   din.size = xint(0);
@@ -240,15 +225,13 @@ ialloc(ushort type)
   return inum;
 }
 
-void
-balloc(int used)
-{
+void balloc(int used) {
   uchar buf[BLKSIZE];
   int i;
 
   printf("balloc: first %d blocks have been allocated\n", used);
   assert(used < BLKSIZE*8);
-  bzero(buf, BLKSIZE);
+  memset(buf, 0, BLKSIZE);
   for(i = 0; i < used; i++){
     buf[i/8] = buf[i/8] | (0x1 << (i%8));
   }
@@ -258,9 +241,8 @@ balloc(int used)
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
-void
-iappend(uint inum, void *xp, uint n)
-{
+// Append nbytes of xp to file represented by inum
+void iappend(uint inum, void *xp, uint n) {
   char *p = (char*)xp;
   uint fbn, off, n1;
   struct dinode din;
@@ -292,7 +274,7 @@ iappend(uint inum, void *xp, uint n)
     }
     n1 = min(n, (fbn + 1) * BLKSIZE - off);
     rsect(x, buf);
-    bcopy(p, buf + off - (fbn * BLKSIZE), n1);
+    memcpy(buf + off - (fbn * BLKSIZE), p, n1);
     wsect(x, buf);
     n -= n1;
     off += n1;
