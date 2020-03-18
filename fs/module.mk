@@ -1,4 +1,5 @@
-FS_IMG_FILES :=
+FS_IMG_FILES := \
+	$(OBJDIR)/user/hello \
 
 FS_CFLAGS := -Wall -Wextra -MD -I$(TOP)
 
@@ -14,4 +15,4 @@ $(FS_FORMAT): fs/fsformat.c
 $(FS_IMAGE): $(FS_FORMAT)
 	@echo + mk $(FS_IMAGE)
 	$(V)mkdir -p $(@D)
-	$(V)$(FS_FORMAT) $(FS_IMAGE) 1024 $(FS_IMG_FILES)
+	$(V)$(FS_FORMAT) $(FS_IMAGE) $(FS_IMG_FILES)

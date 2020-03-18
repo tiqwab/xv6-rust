@@ -74,23 +74,23 @@ gdb:
 	$(GDB) -n -x .gdbinit
 
 # qemu: $(IMAGES) pre-qemu
-qemu: image $(FS_IMAGE)
+qemu: image
 	$(QEMU) $(QEMUOPTS)
 
-qemu-gdb: image $(FS_IMAGE) .gdbinit
+qemu-gdb: image .gdbinit
 	$(QEMU) $(QEMUOPTS) -S
 
-test: test-image $(FS_IMAGE)
+test: test-image
 	$(QEMU) $(QEMUOPTS)
 
 KERN_BINARY := target/i686-xv6rust/debug/xv6-rust
 KERN_TEST_BINARY := target/i686-xv6rust/debug/test
 
-image: $(OBJDIR)/boot/boot kernel
+image: $(OBJDIR)/boot/boot kernel $(FS_IMAGE)
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	$(DD) conv=notrunc if=$(KERN_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
-test-image: $(OBJDIR)/boot/boot kernel
+test-image: $(OBJDIR)/boot/boot kernel $(FS_IMAGE)
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	dd conv=notrunc if=$(KERN_TEST_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 

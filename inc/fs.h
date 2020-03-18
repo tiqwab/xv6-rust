@@ -1,54 +1,75 @@
-// This file based on `inc/fs.h` in JOS.
+// This file based on `fs.h` and `stat.h` in xv6.
 // See COPYRIGHT for copyright information.
+
+/* from `fs.h` */
 
 #ifndef _XV6RUST_FS_H
 #define _XV6RUST_FS_H
 
-#include "mmu.h"
-// #include "types.h"
+#define ROOTINO 1 // root i-number
+#define BLKSIZE 512
+#define FSSIZE 1000 // size of file system in blocks
 
-// Bytes per file system block - same as page size
-#define BLKSIZE PGSIZE
-#define BLKBITSIZE (BLKSIZE * 8)
+#define MAXOPBLOCKS 10  // max # of blocks any FS op writes
+#define LOGSIZE (MAXOPBLOCKS*3) // max data blocks in on-disk log
+#define NBUF (MAXOPBLOCKS*3) // size of disk block cache
 
-// Maximum size of a filename (a single path component), including null
-// Must be a multiple of 4
-#define MAXNAMELEN 128
+// Block containing inode i
+#define IBLOCK(i, sb) ((i) / IPB + sb.inodestart)
 
-// Number of block pointers in a File descriptor
-#define NDIRECT 10
-// Number of direct block pointers in an indirect block
-#define NINDIRECT (BLKSIZE / 4)
+// Inodes per block.
+#define IPB (BLKSIZE / sizeof(struct dinode))
 
-#define MAXFILESIZE ((NDIRECT + NINDIRECT) * BLKSIZE)
+// Disk layout:
+// [ boot block | super block | log | inode blocks |
+//                                          free bit map | data blocks]
+//
+// mkfs computes the super block and builds an initial file system. The
+// super block describes the disk layout:
+struct superblock {
+    uint size;         // Size of file system image (blocks)
+    uint nblocks;      // Number of data blocks
+    uint ninodes;      // Number of inodes.
+    uint nlog;         // Number of log blocks
+    uint logstart;     // Block number of first log block
+    uint inodestart;   // Block number of first inode block
+    uint bmapstart;    // Block number of first free map block
+};
 
-// File types
-#define FTYPE_REG 0 // Regular file
-#define FTYPE_DIR 1 // Directory
+#define NDIRECT 12
+#define NINDIRECT (BLKSIZE / sizeof(uint))
+#define MAXFILE (NDIRECT + NINDIRECT)
 
-struct File {
-    char f_name[MAXNAMELEN]; // filename
-    off_t f_size; // file size in bytes
-    uint32_t f_type; // file type
+// On-disk inode structure
+struct dinode {
+    short type; // File type
+    short major; // Major device number (T_DEV only)
+    short minor; // Minor device number (T_DEV only)
+    short nlink; // Number of links to inode in file system
+    uint size; // Size of file (bytes)
+    uint addrs[NDIRECT+1]; // Data block addresses
+};
 
-    // Block pointers.
-    // A block is allocated iff its value is != 0.
-    uint32_t f_direct[NDIRECT]; // direct blocks
-    uint32_t f_indirect; // indirect block
+// Directory is a file containing a sequence of dirent structures.
+#define DIRSIZ 14
 
-    // Pad out to 256 bytes; must do arithmetic in case we're compiling
-    // fsformat on a 64-bit machine.
-    uint8_t f_pad[256 - MAXNAMELEN - 8 - 4*NDIRECT - 4];
-} __attribute__((packed));    // required only on some 64-bit machines
+struct dirent {
+    ushort inum;
+    char name[DIRSIZ];
+};
 
-// File system super-block (both in-memory and on-disk)
+/* from `stat.h` */
 
-#define FS_MAGIC 0x4A0530AE // related vaguely to 'J\0S!'
+#define T_DIR  1   // Directory
+#define T_FILE 2   // File
+#define T_DEV  3   // Device
 
-struct Super {
-    uint32_t s_magic; // Magic number: FS_MAGIC
-    uint32_t s_nblocks; // Total number of blocks on disk
-    struct File s_root; // Root directory node
+struct stat {
+  short type; // Type of file
+  int dev; // File system's disk device
+  uint ino; // Inode number
+  short nlink; // Number of links to file
+  uint size; // Size of file in bytes
 };
 
 #endif /* _XV6RUST_FS_H */
