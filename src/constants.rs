@@ -4,7 +4,7 @@ pub(crate) const KERN_BASE: u32 = 0xf0000000;
 pub(crate) const PGSIZE: u32 = 4096;
 pub(crate) const PGSHIFT: u32 = 12;
 
-// Page table/directory entry falgs
+// Page table/directory entry flags
 pub(crate) const PTE_PCD: u32 = 0x10; // Cache-disable if set
 pub(crate) const PTE_PWT: u32 = 0x8; // 1: Write-Through, 0: Write-Back
 pub(crate) const PTE_U: u32 = 0x4; // User
@@ -70,3 +70,8 @@ pub(crate) const FL_AC: u32 = 1 << 18; // Alignment Check
 pub(crate) const FL_VIF: u32 = 1 << 19; // Virtual Interrupt Flag
 pub(crate) const FL_VIP: u32 = 1 << 20; // Virtual Interrupt Pending
 pub(crate) const FL_ID: u32 = 1 << 21; // ID flag
+
+// file system
+pub(crate) const BLK_SIZE: usize = 512;
+pub(crate) const SECTOR_SIZE: usize = 512;
+pub(crate) const FS_SIZE: usize = 1000;

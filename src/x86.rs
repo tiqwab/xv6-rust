@@ -11,10 +11,44 @@ pub(crate) fn inb(port: u16) -> u8 {
 }
 
 #[inline]
+pub(crate) fn insl(port: u16, addr: *mut u32, cnt: usize) {
+    unsafe {
+        asm!("cld; rep insl" : :
+        "N{dx}" (port), "{esi}" (addr), "{ecx}" (cnt) :
+        "memory", "cc" :
+        "volatile");
+    }
+
+    // original in xv6
+    // constraint D is di register
+    // asm volatile("cld; rep insl" :
+    //              "=D" (addr), "=c" (cnt) :
+    //              "d" (port), "0" (addr), "1" (cnt) :
+    //              "memory", "cc");
+}
+
+#[inline]
 pub(crate) fn outb(port: u16, value: u8) {
     unsafe {
         asm!("outb $1, $0" :: "N{dx}"(port), "{al}"(value) :: "volatile");
     }
+}
+
+#[inline]
+pub(crate) fn outsl(port: u16, addr: *const u32, cnt: usize) {
+    unsafe {
+        asm!("cld; rep outsl" : :
+        "N{dx}" (port), "{esi}" (addr), "{ecx}" (cnt) :
+        "cc" :
+        "volatile");
+    }
+
+    // original in xv6
+    // constraint S is si register
+    // asm volatile("cld; rep outsl" :
+    //              "=S" (addr), "=c" (cnt) :
+    //              "d" (port), "0" (addr), "1" (cnt) :
+    //              "cc");
 }
 
 #[inline]
@@ -97,4 +131,14 @@ pub(crate) fn xchg<T>(p: *mut T, v: T) -> T {
     // let res: u32;
     // unsafe { asm!("lock; xchgl $0, $1" : "+m"(*p), "=a"(res) : "1"(v) : "cc" : "volatile") }
     // res
+}
+
+#[inline]
+pub(crate) fn cli() {
+    unsafe { asm!("cli" :::: "volatile") };
+}
+
+#[inline]
+pub(crate) fn sti() {
+    unsafe { asm!("sti" :::: "volatile") };
 }
