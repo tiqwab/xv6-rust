@@ -3,7 +3,7 @@ use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
 use crate::{env, gdt, sched, x86};
-use crate::{lapic, mpconfig, syscall};
+use crate::{ide, lapic, mpconfig, syscall};
 use consts::*;
 use core::mem;
 use core::slice;
@@ -365,6 +365,9 @@ fn trap_dispatch(tf: &mut Trapframe) {
     if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
         lapic::eoi();
         sched::sched_yield();
+    } else if tf.tf_trapno == (IRQ_OFFSET + IRQ_IDE) as u32 {
+        lapic::eoi();
+        ide::ide_intr();
     } else if tf.tf_trapno == T_SYSCALL {
         unsafe {
             let ret = syscall::syscall(

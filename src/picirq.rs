@@ -16,7 +16,7 @@ mod consts {
     pub(crate) const IO_MASTER_COMMAND: u16 = 0x20;
     pub(crate) const IO_MASTER_DATA: u16 = 0x21;
     pub(crate) const IO_SLAVE_COMMAND: u16 = 0xA0;
-    pub(crate) const IO_SLAVE_DATA: u16 = 0xA0;
+    pub(crate) const IO_SLAVE_DATA: u16 = 0xA1;
 
     // IRQ at which slave connects to master
     pub(crate) const IRQ_SLAVE: u8 = 2;
@@ -80,17 +80,23 @@ pub(crate) fn pic_init() {
 
     let mask = IRQ_MASK_8259A.lock();
     if *mask != 0xffff {
-        irq_setmask_8259a(*mask, mask);
+        set_mask_8259a(*mask, mask);
     }
 }
 
-fn irq_setmask_8259a(new_mask: u16, mut mask: MutexGuard<u16>) {
+pub(crate) fn unmask_8259a(irq: u8) {
+    let mask = IRQ_MASK_8259A.lock();
+    let new_mask = *mask & (!(1 << (irq as u16)));
+    set_mask_8259a(new_mask, mask);
+}
+
+fn set_mask_8259a(new_mask: u16, mut mask: MutexGuard<u16>) {
     *mask = new_mask;
     if !DID_INIT.load(Ordering::Acquire) {
         return;
     }
     x86::outb(IO_MASTER_DATA, new_mask as u8);
-    x86::outb(IO_MASTER_DATA, (new_mask >> 8) as u8);
+    x86::outb(IO_SLAVE_DATA, (new_mask >> 8) as u8);
     print!("enabled interrupts:");
     for i in 0..16 {
         if !new_mask & (1 << i) != 0 {

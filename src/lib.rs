@@ -18,10 +18,12 @@
 pub mod console;
 
 mod allocator;
+mod buf;
 pub mod constants;
 mod elf;
 mod env;
 mod gdt;
+mod ide;
 mod kclock;
 mod kernel_lock;
 mod lapic;
@@ -92,6 +94,8 @@ pub fn lib_main() {
     }
 
     picirq::pic_init();
+
+    ide::ide_init();
 
     print!("H");
     println!("ello");
