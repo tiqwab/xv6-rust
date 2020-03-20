@@ -50,16 +50,18 @@ GDBPORT	:= 12345
 
 CPUS ?= 1
 
-# Enter QEMU monitor by 'Ctrl+a then c' if -serial mon:stdio is specified
-# ref. https://kashyapc.wordpress.com/2016/02/11/qemu-command-line-behavior-of-serial-stdio-vs-serial-monstdio/
-QEMUOPTS := $(QEMUOPTS)
-QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT) -smp $(CPUS)
-QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
-
 UPROGS :=
 
 include boot/module.mk
 include user/module.mk
+include fs/module.mk
+
+# Enter QEMU monitor by 'Ctrl+a then c' if -serial mon:stdio is specified
+# ref. https://kashyapc.wordpress.com/2016/02/11/qemu-command-line-behavior-of-serial-stdio-vs-serial-monstdio/
+QEMUOPTS := $(QEMUOPTS)
+QEMUOPTS += -drive file=$(OBJDIR)/xv6-rust.img,index=0,media=disk,format=raw -serial mon:stdio -gdb tcp::$(GDBPORT) -smp $(CPUS)
+QEMUOPTS += -drive file=$(FS_IMAGE),index=1,media=disk,format=raw
+QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 
 default: all
 
@@ -84,11 +86,11 @@ test: test-image
 KERN_BINARY := target/i686-xv6rust/debug/xv6-rust
 KERN_TEST_BINARY := target/i686-xv6rust/debug/test
 
-image: $(OBJDIR)/boot/boot kernel
+image: $(OBJDIR)/boot/boot kernel $(FS_IMAGE)
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	$(DD) conv=notrunc if=$(KERN_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
-test-image: $(OBJDIR)/boot/boot kernel
+test-image: $(OBJDIR)/boot/boot kernel $(FS_IMAGE)
 	$(CP) $(OBJDIR)/boot/boot $(OBJDIR)/xv6-rust.img
 	dd conv=notrunc if=$(KERN_TEST_BINARY) of=$(OBJDIR)/xv6-rust.img obs=512 seek=1
 
