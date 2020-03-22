@@ -96,6 +96,7 @@ pub fn lib_main() {
     picirq::pic_init();
 
     ide::ide_init();
+    buf::buf_init();
 
     print!("H");
     println!("ello");

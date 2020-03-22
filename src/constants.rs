@@ -74,4 +74,5 @@ pub(crate) const FL_ID: u32 = 1 << 21; // ID flag
 // file system
 pub(crate) const BLK_SIZE: usize = 512;
 pub(crate) const SECTOR_SIZE: usize = 512;
-pub(crate) const FS_SIZE: usize = 1000;
+pub(crate) const FS_SIZE: usize = 1000; // size of file system in blocks
+pub(crate) const MAX_OP_BLOCKS: usize = 10; // max $ of blocks any FS op writes

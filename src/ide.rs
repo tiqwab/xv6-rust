@@ -258,9 +258,7 @@ pub(crate) fn ide_intr() {
 /// Sync buf with disk.
 /// If B_DIRTY is set, write buf to disk, clear B_DIRTY, set B_VALID.
 /// Else if B_VALID is not set, read buf from disk, set B_VALID.
-pub(crate) fn ide_rw(b: *mut Buf) {
-    let b = unsafe { &mut *b };
-
+pub(crate) fn ide_rw(b: &mut Buf) {
     if (b.flags & (BUF_FLAGS_VALID | BUF_FLAGS_DIRTY)) == BUF_FLAGS_VALID {
         panic!("ide_rw: nothing to do");
     }
@@ -292,23 +290,4 @@ pub(crate) fn ide_init() {
     }
 
     picirq::unmask_8259a(IRQ_IDE);
-
-    // for write test
-    // let mut b = Buf::new();
-    // b.dev = 1;
-    // b.blockno = 1;
-    // b.flags |= BUF_FLAGS_DIRTY;
-    // let str = "foobar";
-    // let src = VirtAddr(str.as_ptr() as u32);
-    // let dst = VirtAddr(b.data.as_ptr() as u32);
-    // unsafe { util::memcpy(dst, src, str.len()) };
-    // ide_rw(&mut b);
-
-    // for read test
-    // check buf.data at the last of ide_intr
-    // let mut b = Buf::new();
-    // b.dev = 1;
-    // b.blockno = 1;
-    // println!("buf.data: {:p}", &b.data);
-    // ide_rw(&mut b);
 }
