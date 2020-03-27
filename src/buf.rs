@@ -2,7 +2,7 @@ use crate::constants::*;
 use crate::ide;
 use crate::spinlock::{Mutex, MutexGuard};
 use consts::*;
-use core::ptr::null_mut;
+use core::ptr::{null_mut, slice_from_raw_parts};
 
 pub(crate) mod consts {
     use crate::constants::MAX_OP_BLOCKS;
@@ -37,20 +37,25 @@ impl Buf {
     }
 }
 
-struct BufCacheHandler<'a> {
+pub(crate) struct BufCacheHandler<'a> {
     buf: &'a mut Buf,
 }
 
 impl<'a> BufCacheHandler<'a> {
-    fn read(&mut self) {
+    pub(crate) fn read(&mut self) {
         if self.buf.flags & BUF_FLAGS_VALID == 0 {
             ide::ide_rw(self.buf);
         }
     }
 
-    fn write(&mut self) {
+    pub(crate) fn write(&mut self) {
         self.buf.flags |= BUF_FLAGS_DIRTY;
         ide::ide_rw(self.buf);
+    }
+
+    pub(crate) fn data(&self) -> &[u8] {
+        let len = self.buf.data.len();
+        unsafe { &*slice_from_raw_parts(self.buf.data.as_ptr(), len) }
     }
 }
 
@@ -72,7 +77,7 @@ impl<'a> BufCacheHandler<'a> {
 /// The implementation uses two state flags internally:
 /// * B_VALID: the buffer data has been read from the disk.
 /// * B_DIRTY: the buffer data has been modified and needs to be written to disk.
-struct BufCache {
+pub(crate) struct BufCache {
     entries: [Option<Buf>; NBUF],
 }
 
@@ -86,7 +91,7 @@ impl BufCache {
         }
     }
 
-    fn get(&mut self, dev: u32, blockno: u32) -> BufCacheHandler {
+    pub(crate) fn get(&mut self, dev: u32, blockno: u32) -> BufCacheHandler {
         let mut empty_entry = None;
 
         // Is the block already cached?
@@ -126,7 +131,7 @@ impl BufCache {
         }
     }
 
-    fn release(&mut self, dev: u32, blockno: u32) {
+    pub(crate) fn release(&mut self, dev: u32, blockno: u32) {
         for entry_opt in self.entries.iter_mut() {
             match entry_opt {
                 None => {}
@@ -147,6 +152,10 @@ impl BufCache {
 }
 
 static BUF_CACHE: Mutex<BufCache> = Mutex::new(BufCache::new());
+
+pub(crate) fn buf_cache() -> MutexGuard<'static, BufCache> {
+    BUF_CACHE.lock()
+}
 
 pub(crate) fn buf_init() {
     {

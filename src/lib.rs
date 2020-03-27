@@ -27,6 +27,7 @@ mod ide;
 mod kclock;
 mod kernel_lock;
 mod lapic;
+mod log;
 mod mp;
 mod mpconfig;
 mod once;
@@ -99,6 +100,7 @@ pub fn lib_main() {
 
     ide::ide_init();
     buf::buf_init();
+    log::log_init(1);
 
     print!("H");
     println!("ello");
