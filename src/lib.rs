@@ -100,7 +100,7 @@ pub fn lib_main() {
 
     ide::ide_init();
     buf::buf_init();
-    log::log_init(1);
+    log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
 
     print!("H");
     println!("ello");
