@@ -29,6 +29,7 @@ mod kernel_lock;
 mod lapic;
 mod mp;
 mod mpconfig;
+mod once;
 mod picirq;
 mod pmap;
 mod sched;
