@@ -18,6 +18,7 @@ mod consts {
     pub(crate) const SR_BSY: u8 = 0x80; // busy
     pub(crate) const SR_DRDY: u8 = 0x40; // drive ready
     pub(crate) const SR_DWF: u8 = 0x20; // drive write fault
+    pub(crate) const SR_DRQ: u8 = 0x08; // data request
     pub(crate) const SR_ERR: u8 = 0x01; // error
 
     pub(crate) const PRIMARY_COMMAND_BASE_REG: u16 = 0x1f0; // for sending command to drive or posting status from the drive
@@ -89,6 +90,14 @@ impl BufQueue {
                 self.len -= 1;
                 Some(res)
             }
+        }
+    }
+
+    fn top(&mut self) -> Option<*mut Buf> {
+        if self.head.is_null() {
+            return None;
+        } else {
+            Some(self.head)
         }
     }
 }
@@ -248,7 +257,7 @@ pub(crate) fn ide_intr() {
         // wakeup(b);
 
         // Stat disk on next buf in queue
-        if let Some(next_b) = queue.pop() {
+        if let Some(next_b) = queue.top() {
             let next_b = unsafe { &mut *next_b };
             ide_start(next_b);
         }
@@ -277,11 +286,12 @@ pub(crate) fn ide_rw(b: &mut Buf) {
     }
 
     // Wait for request to finish.
+    x86::sti();
     while (b.flags & (BUF_FLAGS_VALID | BUF_FLAGS_DIRTY)) != BUF_FLAGS_VALID {
-        x86::sti();
+        // TODO: Remove sti and cli when log_init is executed in the init process.
         // sleep(b, &idelock);
-        x86::cli();
     }
+    x86::cli();
 }
 
 pub(crate) fn ide_init() {

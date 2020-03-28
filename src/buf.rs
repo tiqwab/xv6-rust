@@ -1,8 +1,8 @@
 use crate::constants::*;
-use crate::ide;
 use crate::spinlock::{Mutex, MutexGuard};
+use crate::{ide, util};
 use consts::*;
-use core::ptr::{null_mut, slice_from_raw_parts};
+use core::ptr::{null_mut, slice_from_raw_parts, slice_from_raw_parts_mut};
 
 pub(crate) mod consts {
     use crate::constants::MAX_OP_BLOCKS;
@@ -37,25 +37,41 @@ impl Buf {
     }
 }
 
-pub(crate) struct BufCacheHandler<'a> {
-    buf: &'a mut Buf,
+pub(crate) struct BufCacheHandler {
+    buf: *mut Buf,
+    pub(crate) dev: u32,
+    pub(crate) blockno: u32,
 }
 
-impl<'a> BufCacheHandler<'a> {
+impl BufCacheHandler {
     pub(crate) fn read(&mut self) {
-        if self.buf.flags & BUF_FLAGS_VALID == 0 {
-            ide::ide_rw(self.buf);
+        let buf = unsafe { &mut *self.buf };
+        if buf.flags & BUF_FLAGS_VALID == 0 {
+            ide::ide_rw(buf);
         }
     }
 
     pub(crate) fn write(&mut self) {
-        self.buf.flags |= BUF_FLAGS_DIRTY;
-        ide::ide_rw(self.buf);
+        self.make_dirty();
+        let buf = unsafe { &mut *self.buf };
+        ide::ide_rw(buf);
     }
 
     pub(crate) fn data(&self) -> &[u8] {
-        let len = self.buf.data.len();
-        unsafe { &*slice_from_raw_parts(self.buf.data.as_ptr(), len) }
+        let buf = unsafe { &mut *self.buf };
+        let len = buf.data.len();
+        unsafe { &*slice_from_raw_parts(buf.data.as_ptr(), len) }
+    }
+
+    pub(crate) fn data_mut(&self) -> &mut [u8] {
+        let buf = unsafe { &mut *self.buf };
+        let len = buf.data.len();
+        unsafe { &mut *slice_from_raw_parts_mut(buf.data.as_mut_ptr(), len) }
+    }
+
+    pub(crate) fn make_dirty(&mut self) {
+        let buf = unsafe { &mut *self.buf };
+        buf.flags |= BUF_FLAGS_DIRTY;
     }
 }
 
@@ -103,7 +119,7 @@ impl BufCache {
                 Some(buf) => {
                     if buf.dev == dev && buf.blockno == blockno {
                         buf.refcnt += 1;
-                        return BufCacheHandler { buf };
+                        return BufCacheHandler { buf, dev, blockno };
                     }
                 }
             }
@@ -126,12 +142,17 @@ impl BufCache {
 
                 BufCacheHandler {
                     buf: entry_ref.as_mut().unwrap(),
+                    dev,
+                    blockno,
                 }
             }
         }
     }
 
-    pub(crate) fn release(&mut self, dev: u32, blockno: u32) {
+    pub(crate) fn release(&mut self, handler: BufCacheHandler) {
+        let dev = handler.dev;
+        let blockno = handler.blockno;
+
         for entry_opt in self.entries.iter_mut() {
             match entry_opt {
                 None => {}
@@ -161,20 +182,37 @@ pub(crate) fn buf_init() {
     {
         // for write test
         // let mut cache = BUF_CACHE.lock();
-        // let mut b = cache.get(1, 1);
+        // let mut b1 = cache.get(1, 10);
+        // let mut b2 = cache.get(1, 11);
+
         // let str = "foobar";
-        // let src = crate::pmap::VirtAddr(str.as_ptr() as u32);
-        // let dst = crate::pmap::VirtAddr(b.buf.data.as_ptr() as u32);
-        // unsafe { crate::util::memcpy(dst, src, str.len()) };
-        // b.write();
-        // cache.release(1, 1);
+        // unsafe {
+        //     let src = crate::pmap::VirtAddr(str.as_ptr() as u32);
+        //     let dst = crate::pmap::VirtAddr(b1.data().as_ptr() as u32);
+        //     util::memcpy(dst, src, str.len());
+        //     b1.write();
+        // }
+        // unsafe {
+        //     let src = crate::pmap::VirtAddr(str.as_ptr() as u32);
+        //     let dst = crate::pmap::VirtAddr(b2.data().as_ptr() as u32);
+        //     util::memcpy(dst, src, str.len());
+        //     b2.write();
+        // }
+
+        // cache.release(b2);
+        // cache.release(b1);
     }
 
     {
         // for read test
         // let mut cache = BUF_CACHE.lock();
-        // let mut b = cache.get(1, 1);
-        // b.read();
-        // cache.release(1, 1);
+        // let mut b1 = cache.get(1, 1);
+        // b1.read();
+        // println!("read b1");
+        // let mut b2 = cache.get(1, 2);
+        // b2.read();
+        // println!("read b2");
+        // cache.release(b2);
+        // cache.release(b1);
     }
 }
