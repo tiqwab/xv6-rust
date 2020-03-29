@@ -32,6 +32,7 @@ mod mpconfig;
 mod once;
 mod picirq;
 mod pmap;
+mod rwlock;
 mod sched;
 pub mod serial;
 mod spinlock;
