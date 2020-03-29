@@ -3,7 +3,7 @@ use crate::buf::BufCacheHandler;
 use crate::constants::{BLK_SIZE, LOG_SIZE, MAX_OP_BLOCKS};
 use crate::pmap::VirtAddr;
 use crate::spinlock::Mutex;
-use crate::{buf, util};
+use crate::{buf, superblock, util};
 use core::mem;
 
 // Contents of the header block, used for both the on-disk header block
@@ -58,68 +58,6 @@ impl Log {
 }
 
 static LOG: Mutex<Log> = Mutex::new(Log::empty());
-
-// Disk layout:
-// [ boot block | super block | log | inode blocks | free bit map | data blocks ]
-//
-// mkfs computes the super block and builds an initial file system.
-// The super block describes the disk layout.
-//
-// TODO: move somewhere
-#[repr(C)]
-struct SuperBlock {
-    size: u32,        // size of file system image (blocks)
-    nblocks: u32,     // number of data blocks
-    ninodes: u32,     // number of inodes
-    nlog: u32,        // number of log blocks
-    log_start: u32,   // block number of the first log block
-    inode_start: u32, // block number of the first inode block
-    bmap_start: u32,  // block number of the first free bit map block
-}
-
-impl SuperBlock {
-    /// Create a empty SuperBlock.
-    /// It should be initialized with read_sb.
-    const fn empty() -> SuperBlock {
-        SuperBlock {
-            size: 0,
-            nblocks: 0,
-            ninodes: 0,
-            nlog: 0,
-            log_start: 0,
-            inode_start: 0,
-            bmap_start: 0,
-        }
-    }
-
-    fn init(&mut self, sb: &SuperBlock) {
-        *self = SuperBlock {
-            size: sb.size,
-            nblocks: sb.nblocks,
-            ninodes: sb.ninodes,
-            nlog: sb.nlog,
-            log_start: sb.log_start,
-            inode_start: sb.inode_start,
-            bmap_start: sb.bmap_start,
-        };
-    }
-}
-
-static SUPER_BLOCK: Mutex<SuperBlock> = Mutex::new(SuperBlock::empty());
-
-fn read_sb(dev: u32) {
-    let mut sb = SUPER_BLOCK.lock();
-
-    let mut bcache = buf::buf_cache();
-    let mut b = bcache.get(dev, 1);
-    b.read();
-    let data = b.data();
-
-    let disk_sb = unsafe { &*data.as_ptr().cast::<SuperBlock>() };
-    sb.init(disk_sb);
-
-    bcache.release(b);
-}
 
 /// Called at the start of each FS system call.
 pub(crate) fn begin_op() {
@@ -299,10 +237,8 @@ pub(crate) fn log_init(dev: u32) {
         panic!("log_init: too big logheader");
     }
 
-    read_sb(dev);
-
     {
-        let sb = SUPER_BLOCK.lock();
+        let sb = superblock::get();
         let mut log = LOG.lock();
         log.start = sb.log_start as usize;
         log.size = sb.nlog as usize;

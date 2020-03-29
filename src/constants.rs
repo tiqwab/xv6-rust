@@ -1,5 +1,8 @@
 // FIXME: how to manage constant values (in rust as well as c and asm)
 
+use crate::fs::DInode;
+use core::mem;
+
 pub(crate) const KERN_BASE: u32 = 0xf0000000;
 pub(crate) const PGSIZE: u32 = 4096;
 pub(crate) const PGSHIFT: u32 = 12;
@@ -77,3 +80,7 @@ pub(crate) const SECTOR_SIZE: usize = 512;
 pub(crate) const FS_SIZE: usize = 1000; // size of file system in blocks
 pub(crate) const MAX_OP_BLOCKS: usize = 10; // max $ of blocks any FS op writes
 pub(crate) const LOG_SIZE: usize = MAX_OP_BLOCKS * 3;
+pub(crate) const NDIRECT: usize = 12;
+pub(crate) const NINDIRECT: usize = BLK_SIZE / 4;
+pub(crate) const NINODE: usize = 50; // maximum number of active i-nodes
+pub(crate) const IPB: usize = (BLK_SIZE / mem::size_of::<DInode>()); // how many inodes a block has
