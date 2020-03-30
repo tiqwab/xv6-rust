@@ -84,3 +84,4 @@ pub(crate) const NDIRECT: usize = 12;
 pub(crate) const NINDIRECT: usize = BLK_SIZE / 4;
 pub(crate) const NINODE: usize = 50; // maximum number of active i-nodes
 pub(crate) const IPB: usize = (BLK_SIZE / mem::size_of::<DInode>()); // how many inodes a block has
+pub(crate) const BPB: usize = (BLK_SIZE * 8); // how many bit a block contains
