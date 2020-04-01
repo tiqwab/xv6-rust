@@ -1,4 +1,4 @@
-use crate::buf::buf_cache;
+use crate::buf::{buf_cache, BufCacheHandler};
 use crate::constants::*;
 use crate::once::Once;
 use crate::pmap::VirtAddr;
@@ -13,6 +13,7 @@ use core::mem;
 use core::ptr::{null_mut, slice_from_raw_parts};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
 pub(crate) enum FileType {
     Empty,
     File,
@@ -87,6 +88,7 @@ impl Inode {
 
 /// On-disk inode structure
 /// fs.h in xv6
+#[repr(C)]
 pub(crate) struct DInode {
     typ: FileType,
     major: u16,                // major device number (T_DEV only)
@@ -175,6 +177,14 @@ fn block_for_inode(inum: u32, sb: &SuperBlock) -> u32 {
     inum / (IPB as u32) + sb.inode_start
 }
 
+/// Return inode pointer in the block.
+/// Assume that a passed block is calculated correctly by block_for_inode.
+fn ref_to_inode(inum: u32, bp: &mut BufCacheHandler) -> &mut DInode {
+    let data = bp.data_mut().as_mut_ptr();
+    let dip = data.cast::<DInode>();
+    unsafe { &mut *dip.add((inum as usize) % IPB) }
+}
+
 /// Allocate an inode on device dev.
 pub(crate) fn ialloc(dev: u32, typ: FileType) -> Arc<RwLock<Inode>> {
     let sb = superblock::get();
@@ -184,12 +194,17 @@ pub(crate) fn ialloc(dev: u32, typ: FileType) -> Arc<RwLock<Inode>> {
         let mut bp = bcache.get(dev, block_for_inode(inum, sb));
         bp.read();
 
-        let data = bp.data_mut().as_mut_ptr();
-        let dip = unsafe { &mut *data.cast::<DInode>() };
-        if dip.typ == FileType::Empty {
+        let dinode = ref_to_inode(inum, &mut bp);
+        if dinode.typ == FileType::Empty {
             // a free node
-            unsafe { util::memset(VirtAddr(data as u32), 0, mem::size_of::<DInode>()) };
-            dip.typ = typ;
+            unsafe {
+                util::memset(
+                    VirtAddr(dinode as *const DInode as u32),
+                    0,
+                    mem::size_of::<DInode>(),
+                )
+            };
+            dinode.typ = typ;
             log::log_write(&mut bp); // mark it allocated on the disk
             bcache.release(bp);
             return iget(dev, inum);
@@ -233,7 +248,7 @@ pub(crate) fn iupdate(inode: &Inode) {
     let mut bp = bcache.get(inode.dev, block_for_inode(inode.inum, sb));
     bp.read();
 
-    let dinode = unsafe { &mut *bp.data_mut().as_mut_ptr().cast::<DInode>() };
+    let dinode = ref_to_inode(inode.inum, &mut bp);
     dinode.typ = inode.typ;
     dinode.major = inode.major;
     dinode.minor = inode.minor;
@@ -266,7 +281,8 @@ pub(crate) fn ilock(ip: &Arc<RwLock<Inode>>) -> RwLockWriteGuard<'_, Inode> {
         let mut bcache = buf::buf_cache();
         let mut bp = bcache.get(inode.dev, block_for_inode(inode.inum, sb));
         bp.read();
-        let dinode = unsafe { &*bp.data().as_ptr().cast::<DInode>() };
+
+        let dinode = ref_to_inode(inode.inum, &mut bp);
 
         inode.typ = dinode.typ;
         inode.major = dinode.major;
@@ -621,4 +637,41 @@ pub(crate) fn dir_link(dir: &mut Inode, name: &str, inum: u32) -> bool {
     }
 
     true
+}
+
+pub(crate) fn fs_test(dev: u32) {
+    // Create a dir.
+    //
+    // Offset 0x4000 is start of inodes.
+    // Size of DInode is 64 bytes.
+    // Assigned inum was 3.
+    //
+    // ...
+    // 0040c0 02 00 61 00 63 00 01 00 00 00 00 00 00 00 00 00  >..b.c...........<
+    // 0040d0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  >................<
+    // *
+    log::begin_op();
+    let idir = ialloc(dev, FileType::Dir);
+    let inum = idir.read().inum;
+    {
+        let mut idir = ilock(&idir);
+        idir.major = 98; // just for test
+        idir.minor = 99; // just for test
+        idir.nlink = 1;
+        iupdate(&idir);
+        iunlock(idir);
+    }
+    iput(idir);
+    log::end_op();
+
+    log::begin_op();
+    let idir = iget(dev, inum);
+    {
+        let mut idir = ilock(&idir);
+        idir.major -= 1;
+        iupdate(&idir);
+        iunlock(idir);
+    }
+    iput(idir);
+    log::end_op();
 }

@@ -104,6 +104,8 @@ pub fn lib_main() {
     buf::buf_init();
     log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
 
+    fs::fs_test(1);
+
     print!("H");
     println!("ello");
     println!("The numbers are {} and {}", 42, 1.0 / 3.0);

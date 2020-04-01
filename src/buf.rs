@@ -35,6 +35,10 @@ impl Buf {
             data: [0; BLK_SIZE],
         }
     }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.flags & BUF_FLAGS_DIRTY != 0
+    }
 }
 
 pub(crate) struct BufCacheHandler {
@@ -159,7 +163,9 @@ impl BufCache {
                 Some(buf) => {
                     if buf.dev == dev && buf.blockno == blockno {
                         buf.refcnt -= 1;
-                        if buf.refcnt == 0 {
+                        // Remove entry if not dirty.
+                        // Remove entry when writing back if this is dirty.
+                        if buf.refcnt == 0 && !buf.is_dirty() {
                             *entry_opt = None;
                         }
                         return;

@@ -71,6 +71,7 @@ pub(crate) fn begin_op() {
         }
 
         log.outstanding += 1;
+        break;
     }
 }
 
