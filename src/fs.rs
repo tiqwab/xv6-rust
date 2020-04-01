@@ -8,13 +8,16 @@ use crate::superblock::SuperBlock;
 use crate::{buf, log, superblock, util};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::cmp::min;
 use core::mem;
+use core::ptr::{null_mut, slice_from_raw_parts};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FileType {
     Empty,
     File,
     Dir,
+    Dev,
 }
 
 /// in-memory copy of an inode
@@ -45,6 +48,40 @@ impl Inode {
             size: 0,
             addrs: [0; NDIRECT + 1],
         }
+    }
+
+    /// Return blockno of data at off bytes
+    fn block_for(&mut self, off: u32) -> u32 {
+        let mut blockno = (off as usize) / BLK_SIZE;
+        if blockno < NDIRECT {
+            if self.addrs[blockno] == 0 {
+                self.addrs[blockno] = balloc(self.dev);
+            }
+            return self.addrs[blockno];
+        }
+
+        blockno -= NDIRECT;
+
+        if blockno < NINDIRECT {
+            // load indirect block, allocating if necessary
+            if self.addrs[NDIRECT] == 0 {
+                self.addrs[NDIRECT] = balloc(self.dev);
+            }
+
+            let mut bcache = buf::buf_cache();
+            let mut bp = bcache.get(self.dev, self.addrs[NDIRECT]);
+            bp.read();
+
+            let ap = unsafe { &mut *bp.data_mut().as_mut_ptr().cast::<u32>().add(blockno) };
+            if *ap == 0 {
+                *ap = balloc(self.dev);
+                log::log_write(&mut bp);
+            }
+
+            bcache.release(bp);
+        }
+
+        panic!("addr_for: out of ranse");
     }
 }
 
@@ -257,7 +294,7 @@ pub(crate) fn ilock(ip: &Arc<RwLock<Inode>>) -> RwLockWriteGuard<'_, Inode> {
 }
 
 /// Unlock the given inode.
-pub(crate) fn iunlock(inode: RwLockWriteGuard<'_, Inode>) {
+pub(crate) fn iunlock(_inode: RwLockWriteGuard<'_, Inode>) {
     // just consume RwLockWriteGuard
 }
 
@@ -285,30 +322,6 @@ pub(crate) fn iput(ip: Arc<RwLock<Inode>>) {
 
         icache.remove(inode.dev, inode.inum);
     }
-}
-
-/// Calculate a bitmap brock appropriate for blockno
-fn block_for_bitmap(blockno: u32, sb: &SuperBlock) -> u32 {
-    blockno / (BPB as u32) + sb.bmap_start
-}
-
-/// Free a disk block
-fn bfree(dev: u32, blockno: u32) {
-    let sb = superblock::get();
-    let mut bcache = buf::buf_cache();
-
-    let mut bp = bcache.get(dev, block_for_bitmap(blockno, sb));
-    bp.read();
-
-    let bi = blockno % (BPB as u32);
-    let m = 1 << (bi % 8);
-    if bp.data()[(bi / 8) as usize] & m == 0 {
-        panic!("bfree: freeing free block");
-    }
-    bp.data_mut()[(bi / 8) as usize] &= !m;
-    log::log_write(&mut bp);
-
-    bcache.release(bp);
 }
 
 // Truncate inode (discard contents).
@@ -349,6 +362,263 @@ fn itrunc(inode: &mut Inode) {
 
 /// Common idiom: unlock, then put.
 pub(crate) fn iunlockput(ip: Arc<RwLock<Inode>>, inode: RwLockWriteGuard<'_, Inode>) {
-    let lk = iunlock(inode);
+    iunlock(inode);
     iput(ip);
+}
+
+// ---------------------------------------------------------------------------------
+// Inode Utility
+// ---------------------------------------------------------------------------------
+
+/// Read data from inode.
+/// Return byte count of read data.
+fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
+    if inode.typ == FileType::Dev {
+        panic!("readi: not yet implemented for DEV");
+    }
+
+    if off > inode.size || off + n < off {
+        panic!("readi: illegal offset");
+    }
+    if off + n > inode.size {
+        n = inode.size - off;
+    }
+
+    let mut bcache = buf::buf_cache();
+    let mut tot = 0;
+    while tot < n {
+        let mut bp = bcache.get(inode.dev, inode.block_for(off));
+        bp.read();
+
+        let m = min(n - tot, (BLK_SIZE as u32) - off % (BLK_SIZE as u32));
+        unsafe {
+            util::memmove(
+                VirtAddr(dst as u32),
+                VirtAddr(bp.data().as_ptr() as u32),
+                m as usize,
+            )
+        };
+
+        bcache.release(bp);
+        tot += m;
+        off += m;
+        dst = unsafe { dst.add(m as usize) };
+    }
+
+    n
+}
+
+/// Write a data to inode.
+/// Caller must hold ip->lock.
+fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32) -> u32 {
+    if inode.typ == FileType::Dev {
+        panic!("writei: not yet implemented for DEV");
+    }
+
+    if off > inode.size || off + n < off {
+        panic!("writei: illegal offset");
+    }
+    if off + n > (MAX_FILE * BLK_SIZE) as u32 {
+        panic!("writei: too large offset");
+    }
+
+    let mut bcache = buf::buf_cache();
+    let mut tot = 0;
+    while tot < n {
+        let mut bp = bcache.get(inode.dev, inode.block_for(off));
+        bp.read();
+
+        let m = min(n - tot, (BLK_SIZE as u32) - off % (BLK_SIZE as u32));
+        unsafe {
+            util::memmove(
+                VirtAddr(bp.data().as_ptr() as u32),
+                VirtAddr(src as u32),
+                m as usize,
+            );
+        }
+
+        log::log_write(&mut bp);
+        bcache.release(bp);
+        tot += m;
+        off += m;
+        src = unsafe { src.add(m as usize) };
+    }
+
+    n
+}
+
+// ---------------------------------------------------------------------------------
+// Block handling
+// ---------------------------------------------------------------------------------
+
+/// Calculate a bitmap brock appropriate for blockno
+fn block_for_bitmap(blockno: u32, sb: &SuperBlock) -> u32 {
+    blockno / (BPB as u32) + sb.bmap_start
+}
+
+/// Allocate a zeroed disk block.
+fn balloc(dev: u32) -> u32 {
+    let sb = superblock::get();
+
+    let mut bcache = buf::buf_cache();
+    for blockno in 0..sb.size {
+        let mut bp = bcache.get(dev, block_for_inode(blockno, sb));
+        bp.read();
+
+        let mut bi = 0;
+        while bi < BPB && blockno + (bi as u32) < sb.size {
+            let m = 1 << (bi % 8);
+            // is block free?
+            if bp.data()[bi / 8] & m == 0 {
+                bp.data_mut()[bi / 8] |= m; // mark block in use
+                log::log_write(&mut bp);
+                bcache.release(bp);
+                bzero(dev, blockno + (bi as u32));
+                return blockno + (bi as u32);
+            }
+            bi += 1;
+        }
+
+        bcache.release(bp);
+    }
+
+    panic!("balloc: out of blocks");
+}
+
+/// Zero a block
+fn bzero(dev: u32, blockno: u32) {
+    let mut bcache = buf::buf_cache();
+    let bp = bcache.get(dev, blockno);
+    unsafe { util::memset(VirtAddr(bp.data().as_ptr() as u32), 0, BLK_SIZE) };
+    bcache.release(bp);
+}
+
+/// Free a disk block
+fn bfree(dev: u32, blockno: u32) {
+    let sb = superblock::get();
+    let mut bcache = buf::buf_cache();
+
+    let mut bp = bcache.get(dev, block_for_bitmap(blockno, sb));
+    bp.read();
+
+    let bi = (blockno % (BPB as u32)) as usize;
+    let m = 1 << (bi % 8);
+    if bp.data()[bi / 8] & m == 0 {
+        panic!("bfree: freeing free block");
+    }
+    bp.data_mut()[bi / 8] &= !m;
+    log::log_write(&mut bp);
+
+    bcache.release(bp);
+}
+
+// ---------------------------------------------------------------------------------
+// Dir
+// ---------------------------------------------------------------------------------
+
+pub(crate) struct DirEnt {
+    inum: u32,
+    name: [u8; DIR_SIZ],
+}
+
+impl DirEnt {
+    fn empty() -> DirEnt {
+        DirEnt {
+            inum: 0,
+            name: [0; DIR_SIZ],
+        }
+    }
+
+    fn name_str(&self) -> &str {
+        let sli = unsafe { &*slice_from_raw_parts(self.name.as_ptr(), DIR_SIZ) };
+        core::str::from_utf8(sli).unwrap()
+    }
+
+    fn set_name(&mut self, new_name: &str) {
+        if new_name.len() > DIR_SIZ {
+            panic!("DirEnt::set_name: too long name");
+        }
+
+        let mut cs = new_name.bytes();
+        for i in 0..DIR_SIZ {
+            self.name[i] = cs.next().unwrap_or(0);
+        }
+    }
+
+    fn as_u8_ptr(&self) -> *const u8 {
+        (self as *const DirEnt).cast::<u8>()
+    }
+
+    fn as_u8_mut_ptr(&mut self) -> *mut u8 {
+        (self as *mut DirEnt).cast::<u8>()
+    }
+}
+
+pub(crate) fn dir_lookup(
+    dir: &mut Inode,
+    name: &str,
+    p_off: *mut u32,
+) -> Option<Arc<RwLock<Inode>>> {
+    if dir.typ != FileType::Dir {
+        panic!("dir_lookup: inode is not dir");
+    }
+
+    let dir_ent_size = mem::size_of::<DirEnt>() as u32;
+    let mut ent = DirEnt::empty();
+    let mut off = 0;
+
+    while off < dir.size {
+        let ptr = ent.as_u8_mut_ptr();
+        if readi(dir, ptr, off, dir_ent_size) != dir_ent_size {
+            panic!("dir_lookup: failed to readi");
+        }
+
+        if ent.inum != 0 {
+            if ent.name_str() == name {
+                // entry matches path element
+                if !p_off.is_null() {
+                    unsafe { *p_off = off };
+                }
+                return Some(iget(dir.dev, ent.inum));
+            }
+        }
+
+        off += dir_ent_size;
+    }
+
+    None
+}
+
+/// Write a new directory entry (name, inum) into the directory dp.
+/// Return true if successful. Return false if it already exists.
+pub(crate) fn dir_link(dir: &mut Inode, name: &str, inum: u32) -> bool {
+    // check that name is not present
+    if dir_lookup(dir, name, null_mut()).is_some() {
+        return false;
+    }
+
+    // look for an empty dirent
+    let dir_ent_size = mem::size_of::<DirEnt>() as u32;
+    let mut ent = DirEnt::empty();
+    let mut off = 0;
+
+    while off < dir.size {
+        let ptr = ent.as_u8_mut_ptr();
+        if readi(dir, ptr, off, dir_ent_size) != dir_ent_size {
+            panic!("dir_link: failed to readi");
+        }
+        if ent.inum == 0 {
+            break;
+        }
+        off += dir_ent_size;
+    }
+
+    ent.set_name(name);
+    ent.inum = inum;
+    let ptr = ent.as_u8_ptr();
+    if writei(dir, ptr, off, dir_ent_size) != dir_ent_size {
+        panic!("dir_link: failed to writei");
+    }
+
+    true
 }
