@@ -49,6 +49,7 @@ pub(crate) struct Env {
     env_runs: u32,         // Number of times environment has run
     // FIXME: what type is better for env_pgdir?
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
+    env_cwd: Option<Arc<RwLock<Inode>>>, // Current working directory FIXME: remove option
 }
 
 impl PartialEq for Env {
@@ -103,6 +104,10 @@ impl Env {
 
     pub(crate) fn get_env_id(&self) -> EnvId {
         self.env_id
+    }
+
+    pub(crate) fn get_cwd(&self) -> &Arc<RwLock<Inode>> {
+        &self.env_cwd.as_ref().unwrap()
     }
 }
 
@@ -211,6 +216,7 @@ impl EnvTable {
             env_status: EnvStatus::Runnable,
             env_runs: 0,
             env_pgdir: new_pgdir,
+            env_cwd: None,
         };
 
         let env_opt = &mut self.envs[idx as usize];
@@ -385,6 +391,9 @@ fn env_setup_vm() -> Box<PageDirectory> {
     PageDirectory::new_for_user()
 }
 
+use crate::fs::Inode;
+use crate::rwlock::RwLock;
+use alloc::sync::Arc;
 pub(crate) use temporary::*;
 
 mod temporary {

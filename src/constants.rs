@@ -87,3 +87,5 @@ pub(crate) const NINODE: usize = 50; // maximum number of active i-nodes
 pub(crate) const IPB: usize = (BLK_SIZE / mem::size_of::<DInode>()); // how many inodes a block has
 pub(crate) const BPB: usize = (BLK_SIZE * 8); // how many bit a block contains
 pub(crate) const DIR_SIZ: usize = 14; // maximum number of inodes a directory can contain
+pub(crate) const ROOT_DEV: u32 = 1; // device number of file system root disk
+pub(crate) const ROOT_INUM: u32 = 1; // inode of root

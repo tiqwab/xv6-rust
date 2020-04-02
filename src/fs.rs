@@ -5,12 +5,12 @@ use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockUpgradeableGuard, RwLockWriteGuard};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::superblock::SuperBlock;
-use crate::{buf, log, superblock, util};
+use crate::{buf, env, log, superblock, util};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::min;
 use core::mem;
-use core::ptr::{null_mut, slice_from_raw_parts};
+use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
@@ -639,6 +639,114 @@ pub(crate) fn dir_link(dir: &mut Inode, name: &str, inum: u32) -> bool {
     true
 }
 
+// ---------------------------------------------------------------------------------
+// Path names
+// ---------------------------------------------------------------------------------
+
+/// Copy the next path element from path into name.
+/// Return a pointer to the element following the copied one.
+/// The returned path has no leading slashes,
+/// so the caller can check *path=='\0' to see if the name is the last one.
+/// If no name to remove, return 0.
+///
+/// Examples:
+///   skipelem("a/bb/c", name) = "bb/c", setting name = "a"
+///   skipelem("///a//bb", name) = "bb", setting name = "a"
+///   skipelem("a", name) = "", setting name = "a"
+///   skipelem("", name) = skipelem("////", name) = 0
+unsafe fn skip_elem(mut path: *const u8, name: *mut u8) -> *const u8 {
+    while *path == '/' as u8 {
+        path = path.add(1);
+    }
+    if *path == 0 {
+        return null();
+    }
+
+    let s = path;
+    while *path != '/' as u8 && *path != 0 {
+        path = path.add(1);
+    }
+
+    let len = path.offset_from(s);
+    if len >= DIR_SIZ as isize {
+        core::intrinsics::copy(s, name, DIR_SIZ);
+    } else {
+        core::intrinsics::copy(s, name, len as usize);
+        *name.offset(len) = 0;
+    }
+
+    while *path == '/' as u8 {
+        path = path.add(1);
+    }
+    path
+}
+
+/// Look up and return the inode for a path name.
+/// If does_want_parent == true, return the inode for the parent and copy the final
+/// path element into name, which must have room for DIRSIZ bytes.
+/// Must be called inside a transaction since it calls iput().
+pub(crate) fn namex(
+    mut path: *const u8,
+    does_want_parent: bool,
+    name: *mut u8,
+) -> Option<Arc<RwLock<Inode>>> {
+    let mut ip: Arc<RwLock<Inode>>;
+
+    unsafe {
+        if *path == '/' as u8 {
+            ip = iget(ROOT_DEV, ROOT_INUM);
+        } else {
+            let cur_env = env::cur_env().unwrap();
+            ip = idup(cur_env.get_cwd())
+        }
+
+        loop {
+            path = skip_elem(path, name);
+            if path.is_null() {
+                break;
+            }
+
+            let mut inode = ilock(&ip);
+
+            if inode.typ == FileType::Dir {
+                iunlock(inode);
+                iput(ip);
+                return None;
+            }
+
+            if does_want_parent && *path == '\0' as u8 {
+                // stop one level early
+                iunlock(inode);
+                return Some(ip);
+            }
+
+            let name_str = {
+                let sli = &*slice_from_raw_parts(name, DIR_SIZ);
+                core::str::from_utf8(sli).unwrap()
+            };
+            match dir_lookup(&mut inode, name_str, null_mut()) {
+                None => {
+                    iunlock(inode);
+                    iput(ip);
+                    return None;
+                }
+                Some(next) => {
+                    iunlock(inode);
+                    iput(ip);
+                    ip = next;
+                }
+            }
+        }
+
+        if does_want_parent {
+            iput(ip);
+            return None;
+        }
+    }
+
+    Some(ip)
+}
+
 pub(crate) fn fs_test(dev: u32) {
     // Create a dir.
     //
@@ -674,4 +782,44 @@ pub(crate) fn fs_test(dev: u32) {
     }
     iput(idir);
     log::end_op();
+
+    unsafe {
+        //   skipelem("a/bb/c", name) = "bb/c", setting name = "a"
+        //   skipelem("///a//bb", name) = "bb", setting name = "a"
+        //   skipelem("a", name) = "", setting name = "a"
+        //   skipelem("", name) = skipelem("////", name) = 0
+        let path = "a/b//c";
+        let mut name = [0; DIR_SIZ];
+        let mut p = path.as_ptr();
+        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
+        println!("path: {:p}, a: {:p}, name: {:?}", path, p, &name[..]);
+
+        let path = "///a//bb";
+        let mut name = [0; DIR_SIZ];
+        let mut p = path.as_ptr();
+        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
+        println!("path: {:p}, a: {:p}, name: {:?}", path, p, &name[..]);
+
+        let path = ['a' as u8, '\0' as u8];
+        let mut name = [0; DIR_SIZ];
+        let mut p = path.as_ptr();
+        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
+        println!(
+            "path: {:p}, a: {:p}, name: {:?}",
+            path.as_ptr(),
+            p,
+            &name[..]
+        );
+
+        let path = ['\0' as u8];
+        let mut name = [0; DIR_SIZ];
+        let mut p = path.as_ptr();
+        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
+        println!(
+            "path: {:p}, a: {:p}, name: {:?}",
+            path.as_ptr(),
+            p,
+            &name[..]
+        );
+    }
 }
