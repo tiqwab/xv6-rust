@@ -5,7 +5,7 @@ use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockUpgradeableGuard, RwLockWriteGuard};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::superblock::SuperBlock;
-use crate::{buf, env, log, superblock, util};
+use crate::{buf, env, file, log, superblock, util};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::min;
@@ -388,7 +388,7 @@ pub(crate) fn iunlockput(ip: Arc<RwLock<Inode>>, inode: RwLockWriteGuard<'_, Ino
 
 /// Read data from inode.
 /// Return byte count of read data.
-fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
+pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
     if inode.typ == InodeType::Dev {
         panic!("readi: not yet implemented for DEV");
     }
@@ -426,7 +426,7 @@ fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
 
 /// Write a data to inode.
 /// Caller must hold ip->lock.
-fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32) -> u32 {
+pub(crate) fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32) -> u32 {
     if inode.typ == InodeType::Dev {
         panic!("writei: not yet implemented for DEV");
     }
@@ -461,6 +461,25 @@ fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32) -> u32 {
     }
 
     n
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Stat {
+    typ: InodeType, // type of file
+    dev: u32,       // file system's disk device
+    inum: u32,      // inode number
+    nlink: u16,     // number of links to file
+    size: u32,      // size of file in bytes
+}
+
+pub(crate) fn stati(inode: &mut Inode) -> Stat {
+    Stat {
+        typ: inode.typ,
+        dev: inode.dev,
+        inum: inode.inum,
+        nlink: inode.nlink,
+        size: inode.size,
+    }
 }
 
 // ---------------------------------------------------------------------------------

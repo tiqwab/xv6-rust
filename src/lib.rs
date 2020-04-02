@@ -22,6 +22,7 @@ mod buf;
 pub mod constants;
 mod elf;
 mod env;
+mod file;
 mod fs;
 mod gdt;
 mod ide;
