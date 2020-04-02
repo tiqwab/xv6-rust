@@ -14,7 +14,7 @@ use core::ptr::{null, null_mut, slice_from_raw_parts};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
-pub(crate) enum FileType {
+pub(crate) enum InodeType {
     Empty,
     File,
     Dir,
@@ -28,7 +28,7 @@ pub(crate) struct Inode {
     inum: u32,
     valid: bool, // already read data from disk
     // the below is same as DInode
-    typ: FileType,
+    typ: InodeType,
     major: u16,                // major device number (T_DEV only)
     minor: u16,                // minor device number (T_DEV only)
     nlink: u16,                // number of links to inode in file system
@@ -42,7 +42,7 @@ impl Inode {
             dev,
             inum,
             valid: false,
-            typ: FileType::Empty,
+            typ: InodeType::Empty,
             major: 0,
             minor: 0,
             nlink: 0,
@@ -90,7 +90,7 @@ impl Inode {
 /// fs.h in xv6
 #[repr(C)]
 pub(crate) struct DInode {
-    typ: FileType,
+    typ: InodeType,
     major: u16,                // major device number (T_DEV only)
     minor: u16,                // minor device number (T_DEV only)
     nlink: u16,                // number of links to inode in file system
@@ -186,7 +186,7 @@ fn ref_to_inode(inum: u32, bp: &mut BufCacheHandler) -> &mut DInode {
 }
 
 /// Allocate an inode on device dev.
-pub(crate) fn ialloc(dev: u32, typ: FileType) -> Arc<RwLock<Inode>> {
+pub(crate) fn ialloc(dev: u32, typ: InodeType) -> Arc<RwLock<Inode>> {
     let sb = superblock::get();
 
     for inum in 1..(sb.ninodes) {
@@ -195,7 +195,7 @@ pub(crate) fn ialloc(dev: u32, typ: FileType) -> Arc<RwLock<Inode>> {
         bp.read();
 
         let dinode = ref_to_inode(inum, &mut bp);
-        if dinode.typ == FileType::Empty {
+        if dinode.typ == InodeType::Empty {
             // a free node
             unsafe {
                 util::memset(
@@ -301,7 +301,7 @@ pub(crate) fn ilock(ip: &Arc<RwLock<Inode>>) -> RwLockWriteGuard<'_, Inode> {
 
         bcache.release(bp);
 
-        if inode.typ == FileType::Empty {
+        if inode.typ == InodeType::Empty {
             panic!("ilock: no type");
         }
     }
@@ -332,7 +332,7 @@ pub(crate) fn iput(ip: Arc<RwLock<Inode>>) {
         let mut icache = inode_cache().lock();
 
         itrunc(inode);
-        inode.typ = FileType::Empty;
+        inode.typ = InodeType::Empty;
         iupdate(inode);
         inode.valid = false;
 
@@ -389,7 +389,7 @@ pub(crate) fn iunlockput(ip: Arc<RwLock<Inode>>, inode: RwLockWriteGuard<'_, Ino
 /// Read data from inode.
 /// Return byte count of read data.
 fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
-    if inode.typ == FileType::Dev {
+    if inode.typ == InodeType::Dev {
         panic!("readi: not yet implemented for DEV");
     }
 
@@ -427,7 +427,7 @@ fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
 /// Write a data to inode.
 /// Caller must hold ip->lock.
 fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32) -> u32 {
-    if inode.typ == FileType::Dev {
+    if inode.typ == InodeType::Dev {
         panic!("writei: not yet implemented for DEV");
     }
 
@@ -575,7 +575,7 @@ pub(crate) fn dir_lookup(
     name: &str,
     p_off: *mut u32,
 ) -> Option<Arc<RwLock<Inode>>> {
-    if dir.typ != FileType::Dir {
+    if dir.typ != InodeType::Dir {
         panic!("dir_lookup: inode is not dir");
     }
 
@@ -708,7 +708,7 @@ pub(crate) fn namex(
 
             let mut inode = ilock(&ip);
 
-            if inode.typ == FileType::Dir {
+            if inode.typ == InodeType::Dir {
                 iunlock(inode);
                 iput(ip);
                 return None;
@@ -759,7 +759,7 @@ pub(crate) fn fs_test(dev: u32) {
     // 0040d0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  >................<
     // *
     log::begin_op();
-    let idir = ialloc(dev, FileType::Dir);
+    let idir = ialloc(dev, InodeType::Dir);
     let inum = idir.read().inum;
     {
         let mut idir = ilock(&idir);
