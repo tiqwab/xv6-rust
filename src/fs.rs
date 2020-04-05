@@ -51,6 +51,39 @@ impl Inode {
         }
     }
 
+    fn init(&mut self, major: u16, minor: u16) {
+        self.major = major;
+        self.minor = minor;
+        self.nlink = 1;
+    }
+
+    pub(crate) fn is_dir(&self) -> bool {
+        self.typ == InodeType::Dir
+    }
+
+    pub(crate) fn is_file(&self) -> bool {
+        self.typ == InodeType::File
+    }
+
+    pub(crate) fn get_dev(&self) -> u32 {
+        self.dev
+    }
+
+    pub(crate) fn get_inum(&self) -> u32 {
+        self.inum
+    }
+
+    pub(crate) fn get_nlink(&self) -> u16 {
+        self.nlink
+    }
+
+    pub(crate) fn incr_nlink(&mut self) {
+        self.nlink += 1;
+    }
+    pub(crate) fn decr_nlink(&mut self) {
+        self.nlink -= 1;
+    }
+
     /// Return blockno of data at off bytes
     fn block_for(&mut self, off: u32) -> u32 {
         let mut blockno = (off as usize) / BLK_SIZE;
@@ -186,7 +219,7 @@ fn ref_to_inode(inum: u32, bp: &mut BufCacheHandler) -> &mut DInode {
 }
 
 /// Allocate an inode on device dev.
-pub(crate) fn ialloc(dev: u32, typ: InodeType) -> Arc<RwLock<Inode>> {
+pub(crate) fn ialloc(dev: u32, typ: InodeType, major: u16, minor: u16) -> Arc<RwLock<Inode>> {
     let sb = superblock::get();
 
     for inum in 1..(sb.ninodes) {
@@ -205,6 +238,9 @@ pub(crate) fn ialloc(dev: u32, typ: InodeType) -> Arc<RwLock<Inode>> {
                 )
             };
             dinode.typ = typ;
+            dinode.major = major;
+            dinode.minor = minor;
+            dinode.nlink = 1;
             log::log_write(&mut bp); // mark it allocated on the disk
             bcache.release(bp);
             return iget(dev, inum);
@@ -557,7 +593,7 @@ pub(crate) struct DirEnt {
 }
 
 impl DirEnt {
-    fn empty() -> DirEnt {
+    pub(crate) fn empty() -> DirEnt {
         DirEnt {
             inum: 0,
             name: [0; DIR_SIZ],
@@ -658,6 +694,29 @@ pub(crate) fn dir_link(dir: &mut Inode, name: &str, inum: u32) -> bool {
     true
 }
 
+pub(crate) fn is_dir_empty(dp: &mut Inode) -> bool {
+    assert!(dp.typ == InodeType::Dir);
+
+    let dir_ent_size = mem::size_of::<DirEnt>() as u32;
+    let mut off = 2 * dir_ent_size;
+
+    while off < dp.size {
+        let mut ent = DirEnt::empty();
+        let ent_p = &mut ent as *mut _ as *mut u8;
+        let n = readi(dp, ent_p, off, dir_ent_size);
+
+        if n != dir_ent_size {
+            panic!("is_dir_empty: failed to readi");
+        }
+        if ent.inum != 0 {
+            return false;
+        }
+
+        off += dir_ent_size;
+    }
+    true
+}
+
 // ---------------------------------------------------------------------------------
 // Path names
 // ---------------------------------------------------------------------------------
@@ -704,11 +763,7 @@ unsafe fn skip_elem(mut path: *const u8, name: *mut u8) -> *const u8 {
 /// If does_want_parent == true, return the inode for the parent and copy the final
 /// path element into name, which must have room for DIRSIZ bytes.
 /// Must be called inside a transaction since it calls iput().
-pub(crate) fn namex(
-    mut path: *const u8,
-    does_want_parent: bool,
-    name: *mut u8,
-) -> Option<Arc<RwLock<Inode>>> {
+fn namex(mut path: *const u8, does_want_parent: bool, name: *mut u8) -> Option<Arc<RwLock<Inode>>> {
     let mut ip: Arc<RwLock<Inode>>;
 
     unsafe {
@@ -766,6 +821,15 @@ pub(crate) fn namex(
     Some(ip)
 }
 
+pub(crate) fn namei(path: *const u8) -> Option<Arc<RwLock<Inode>>> {
+    let mut name = [0; DIR_SIZ];
+    namex(path, false, name.as_mut_ptr())
+}
+
+pub(crate) fn nameiparent(path: *const u8, name: *mut u8) -> Option<Arc<RwLock<Inode>>> {
+    namex(path, true, name)
+}
+
 pub(crate) fn fs_test(dev: u32) {
     // Create a dir.
     //
@@ -778,13 +842,10 @@ pub(crate) fn fs_test(dev: u32) {
     // 0040d0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  >................<
     // *
     log::begin_op();
-    let idir = ialloc(dev, InodeType::Dir);
+    let idir = ialloc(dev, InodeType::Dir, 98, 99);
     let inum = idir.read().inum;
     {
-        let mut idir = ilock(&idir);
-        idir.major = 98; // just for test
-        idir.minor = 99; // just for test
-        idir.nlink = 1;
+        let idir = ilock(&idir);
         iupdate(&idir);
         iunlock(idir);
     }

@@ -32,6 +32,19 @@ impl File {
         }
     }
 
+    pub(crate) fn init_as_inode(
+        &mut self,
+        readable: bool,
+        writable: bool,
+        ip: &Arc<RwLock<Inode>>,
+    ) {
+        self.typ = FileType::Inode;
+        self.ip = Some(Arc::clone(ip));
+        self.readable = readable;
+        self.writable = writable;
+        self.off = 0;
+    }
+
     pub(crate) fn stat(&self) -> Option<fs::Stat> {
         if self.typ == FileType::Inode {
             let ip = self.ip.as_ref().unwrap();
@@ -122,8 +135,8 @@ pub(crate) struct FileTable {
 }
 
 pub(crate) struct FileTableEntry {
-    file: Arc<File>,
-    index: usize,
+    pub(crate) file: Arc<File>,
+    pub(crate) index: usize,
 }
 
 impl FileTable {
@@ -134,10 +147,17 @@ impl FileTable {
     }
 
     /// Allocate a file structure.
-    pub(crate) fn alloc(&mut self) -> Option<FileTableEntry> {
+    pub(crate) fn alloc_as_inode(
+        &mut self,
+        readable: bool,
+        writable: bool,
+        ip: &Arc<RwLock<Inode>>,
+    ) -> Option<FileTableEntry> {
         for (i, f_opt) in self.files.iter_mut().enumerate() {
             if f_opt.is_none() {
-                let f = Arc::new(File::new());
+                let mut f = File::new();
+                f.init_as_inode(readable, writable, ip);
+                let f = Arc::new(f);
                 *f_opt = Some(Arc::clone(&f));
                 return Some(FileTableEntry { file: f, index: i });
             }
@@ -190,3 +210,5 @@ static FILE_TABLE: Mutex<FileTable> = Mutex::new(FileTable::new());
 pub(crate) fn file_table() -> MutexGuard<'static, FileTable> {
     FILE_TABLE.lock()
 }
+
+pub(crate) struct FileDescriptor(pub(crate) u32);

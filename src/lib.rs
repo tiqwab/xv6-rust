@@ -10,6 +10,7 @@
 #![feature(slice_from_raw_parts)]
 #![feature(core_intrinsics)]
 #![feature(option_result_contains)]
+#![feature(try_trait)]
 // FIXME: remove later
 #![allow(dead_code)]
 
@@ -41,6 +42,7 @@ pub mod serial;
 mod spinlock;
 mod superblock;
 mod syscall;
+mod sysfile;
 mod trap;
 mod util;
 pub mod vga_buffer;

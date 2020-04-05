@@ -1,4 +1,5 @@
 use crate::pmap::VirtAddr;
+use core::cmp;
 
 pub(crate) unsafe fn memset(va: VirtAddr, c: u8, n: usize) {
     let mut p = va.0 as *mut u8;
@@ -20,4 +21,40 @@ pub(crate) unsafe fn memcpy(dest: VirtAddr, src: VirtAddr, n: usize) {
 
 pub(crate) unsafe fn memmove(dest: VirtAddr, src: VirtAddr, n: usize) {
     memcpy(dest, src, n);
+}
+
+pub(crate) fn strnlen(s: *const u8, max_len: usize) -> usize {
+    unsafe {
+        let mut p = s;
+        let mut i = 0;
+        while i < max_len {
+            if *p == 0 {
+                break;
+            }
+            i += 1;
+            p = p.add(1);
+        }
+        i
+    }
+}
+
+pub(crate) fn strncmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
+    unsafe {
+        let mut p1 = s1;
+        let mut p2 = s2;
+        for _ in 0..n {
+            let c1 = *p1;
+            let c2 = *p2;
+            if c1 == 0 && c2 == 0 {
+                break;
+            } else if c1 > c2 {
+                return 1;
+            } else if c1 < c2 {
+                return -1;
+            }
+            p1 = p1.add(1);
+            p2 = p2.add(1);
+        }
+        0
+    }
 }
