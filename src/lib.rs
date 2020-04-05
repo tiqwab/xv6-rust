@@ -10,6 +10,7 @@
 #![feature(slice_from_raw_parts)]
 #![feature(core_intrinsics)]
 #![feature(option_result_contains)]
+#![feature(try_trait)]
 // FIXME: remove later
 #![allow(dead_code)]
 
@@ -22,11 +23,14 @@ mod buf;
 pub mod constants;
 mod elf;
 mod env;
+mod file;
+mod fs;
 mod gdt;
 mod ide;
 mod kclock;
 mod kernel_lock;
 mod lapic;
+mod log;
 mod mp;
 mod mpconfig;
 mod once;
@@ -36,7 +40,9 @@ mod rwlock;
 mod sched;
 pub mod serial;
 mod spinlock;
+mod superblock;
 mod syscall;
+mod sysfile;
 mod trap;
 mod util;
 pub mod vga_buffer;
@@ -99,6 +105,9 @@ pub fn lib_main() {
 
     ide::ide_init();
     buf::buf_init();
+    log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
+
+    fs::fs_test(1);
 
     print!("H");
     println!("ello");

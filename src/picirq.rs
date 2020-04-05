@@ -54,18 +54,21 @@ pub(crate) fn pic_init() {
     //    m:  0 = slave PIC, 1 = master PIC
     //	  (ignored when b is 0, as the master/slave role
     //	  can be hardwired).
-    //    a:  1 = Automatic EOI mode
+    //    a:  1 = Automatic EOI mode (AEOI mode)
     //    p:  0 = MCS-80/85 mode, 1 = intel x86 mode
-    x86::outb(IO_MASTER_DATA, 0x3);
+    x86::outb(IO_MASTER_DATA, 0x03);
 
     // Set up slave (8259A-2)
 
     x86::outb(IO_SLAVE_COMMAND, 0x11); // ICW1
     x86::outb(IO_SLAVE_DATA, IRQ_OFFSET + 8); // ICW2
     x86::outb(IO_SLAVE_DATA, IRQ_SLAVE); // ICW3
-                                         // NB Automatic EOI mode doesn't tend to work on the slave.
-                                         // Linux source code says it's "to be investigated".
-    x86::outb(IO_SLAVE_DATA, 0x01); // ICW4
+
+    // NB Automatic EOI mode doesn't tend to work on the slave.
+    // Linux source code says it's "to be investigated".
+    //
+    // But it is required for IDE interrupt and it does work at least in QEMU.
+    x86::outb(IO_SLAVE_DATA, 0x03); // ICW4
 
     // OCW3:  0ef01prs
     //   ef:  0x = NOP, 10 = clear specific mask, 11 = set specific mask

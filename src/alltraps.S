@@ -20,3 +20,11 @@ _alltraps:
   # pushl %esp to pass a pointer to the Trapframe as argument to trap
   pushl %esp
   call trap
+
+  # return from trap only when trap happens in kernel initialization
+  popl %esp
+  popal
+  popl %es
+  popl %ds
+  addl $8, %esp
+  iret

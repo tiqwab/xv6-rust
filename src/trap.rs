@@ -364,9 +364,11 @@ fn trap_dispatch(tf: &mut Trapframe) {
     // Handle processor exceptions.
     if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
         lapic::eoi();
-        sched::sched_yield();
     } else if tf.tf_trapno == (IRQ_OFFSET + IRQ_IDE) as u32 {
-        lapic::eoi();
+        // Don't send EOI to lapic because interrupt comes from 8259A.
+        // AEOI mode is enabled (see picirq.rs), so manual EOI is not also necessary for 8259A.
+        // lapic::eoi();
+
         ide::ide_intr();
     } else if tf.tf_trapno == T_SYSCALL {
         unsafe {
@@ -396,7 +398,7 @@ fn trap_dispatch(tf: &mut Trapframe) {
 }
 
 #[no_mangle]
-extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
+extern "C" fn trap(orig_tf: *mut Trapframe) {
     let mut tf = unsafe { orig_tf.as_mut().unwrap() };
 
     // The environment may have set DF and some versions
@@ -442,11 +444,19 @@ extern "C" fn trap(orig_tf: *mut Trapframe) -> ! {
     trap_dispatch(tf);
 
     // Return to the current environment, which should be running.
-    {
-        let curenv = env::cur_env_mut().expect("there is no running Env");
+    if let Some(curenv) = env::cur_env_mut() {
         assert!(curenv.is_running(), "the Env is not running");
-        let env_id = curenv.get_env_id();
-        let table = env::env_table();
-        env::env_run(env_id, table);
+
+        if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
+            // preemptive
+            sched::sched_yield();
+        } else {
+            // resume the current env
+            let env_id = curenv.get_env_id();
+            let table = env::env_table();
+            env::env_run(env_id, table);
+        }
+    } else {
+        // assume that it is in kernel initialization
     }
 }

@@ -6,7 +6,7 @@ use crate::elf::{ElfParser, ProghdrType};
 use crate::pmap::{PageDirectory, VirtAddr, PDX};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
-use crate::{mpconfig, pmap, sched, util, x86};
+use crate::{fs, mpconfig, pmap, sched, util, x86};
 use core::fmt;
 use core::fmt::{Error, Formatter};
 
@@ -49,6 +49,8 @@ pub(crate) struct Env {
     env_runs: u32,         // Number of times environment has run
     // FIXME: what type is better for env_pgdir?
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
+    env_cwd: Option<Arc<RwLock<Inode>>>, // Current working directory FIXME: remove option
+    env_ofile: [Option<Arc<File>>; NFILE_PER_ENV], // Open files
 }
 
 impl PartialEq for Env {
@@ -103,6 +105,26 @@ impl Env {
 
     pub(crate) fn get_env_id(&self) -> EnvId {
         self.env_id
+    }
+
+    pub(crate) fn get_cwd(&self) -> &Arc<RwLock<Inode>> {
+        &self.env_cwd.as_ref().unwrap()
+    }
+
+    pub(crate) fn change_cwd(&mut self, ip: &Arc<RwLock<Inode>>) {
+        let old = Arc::clone(self.env_cwd.as_ref().unwrap());
+        fs::iput(old);
+        self.env_cwd = Some(Arc::clone(ip));
+    }
+
+    pub(crate) fn fd_alloc(&mut self, f: &Arc<File>) -> Option<FileDescriptor> {
+        for (fd, ent_opt) in self.env_ofile.iter_mut().enumerate() {
+            if ent_opt.is_none() {
+                *ent_opt = Some(Arc::clone(f));
+                return Some(FileDescriptor(fd as u32));
+            }
+        }
+        None
     }
 }
 
@@ -211,6 +233,8 @@ impl EnvTable {
             env_status: EnvStatus::Runnable,
             env_runs: 0,
             env_pgdir: new_pgdir,
+            env_cwd: None,
+            env_ofile: [None; NFILE_PER_ENV],
         };
 
         let env_opt = &mut self.envs[idx as usize];
@@ -385,6 +409,10 @@ fn env_setup_vm() -> Box<PageDirectory> {
     PageDirectory::new_for_user()
 }
 
+use crate::file::{File, FileDescriptor};
+use crate::fs::Inode;
+use crate::rwlock::RwLock;
+use alloc::sync::Arc;
 pub(crate) use temporary::*;
 
 mod temporary {
