@@ -600,19 +600,20 @@ impl DirEnt {
         }
     }
 
-    fn name_str(&self) -> &str {
-        let sli = unsafe { &*slice_from_raw_parts(self.name.as_ptr(), DIR_SIZ) };
-        core::str::from_utf8(sli).unwrap()
-    }
-
-    fn set_name(&mut self, new_name: &str) {
-        if new_name.len() > DIR_SIZ {
+    fn set_name(&mut self, new_name: *const u8) {
+        let new_len = util::strnlen(new_name, DIR_SIZ);
+        if new_len > DIR_SIZ {
             panic!("DirEnt::set_name: too long name");
         }
 
-        let mut cs = new_name.bytes();
+        let mut dst = self.name.as_mut_ptr();
+        let mut src = new_name;
         for i in 0..DIR_SIZ {
-            self.name[i] = cs.next().unwrap_or(0);
+            unsafe {
+                *dst = *src;
+                dst = dst.add(1);
+                src = src.add(1);
+            }
         }
     }
 
@@ -627,7 +628,7 @@ impl DirEnt {
 
 pub(crate) fn dir_lookup(
     dir: &mut Inode,
-    name: &str,
+    name: *const u8,
     p_off: *mut u32,
 ) -> Option<Arc<RwLock<Inode>>> {
     if dir.typ != InodeType::Dir {
@@ -645,7 +646,7 @@ pub(crate) fn dir_lookup(
         }
 
         if ent.inum != 0 {
-            if ent.name_str() == name {
+            if util::strncmp(name, ent.name.as_ptr(), DIR_SIZ) == 0 {
                 // entry matches path element
                 if !p_off.is_null() {
                     unsafe { *p_off = off };
@@ -662,7 +663,7 @@ pub(crate) fn dir_lookup(
 
 /// Write a new directory entry (name, inum) into the directory dp.
 /// Return true if successful. Return false if it already exists.
-pub(crate) fn dir_link(dir: &mut Inode, name: &str, inum: u32) -> bool {
+pub(crate) fn dir_link(dir: &mut Inode, name: *const u8, inum: u32) -> bool {
     // check that name is not present
     if dir_lookup(dir, name, null_mut()).is_some() {
         return false;
@@ -794,11 +795,7 @@ fn namex(mut path: *const u8, does_want_parent: bool, name: *mut u8) -> Option<A
                 return Some(ip);
             }
 
-            let name_str = {
-                let sli = &*slice_from_raw_parts(name, DIR_SIZ);
-                core::str::from_utf8(sli).unwrap()
-            };
-            match dir_lookup(&mut inode, name_str, null_mut()) {
+            match dir_lookup(&mut inode, name, null_mut()) {
                 None => {
                     iunlock(inode);
                     iput(ip);

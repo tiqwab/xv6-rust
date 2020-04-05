@@ -60,9 +60,8 @@ pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
         .map_err(|_| SysFileError::IllegalFileName)
         .and_then(|dp| {
             let mut dir_inode = fs::ilock(&dp);
-            let name_str = core::str::from_utf8(&name).unwrap();
             if dir_inode.get_dev() == inode_dev
-                && fs::dir_link(&mut dir_inode, name_str, inode_inum)
+                && fs::dir_link(&mut dir_inode, name.as_ptr(), inode_inum)
             {
                 fs::iunlock(dir_inode);
                 fs::iput(dp);
@@ -112,10 +111,9 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
     }
 
     let mut off = 0;
-    let name_str = core::str::from_utf8(&name).unwrap();
 
     // get the target inode in the directory
-    let ip = fs::dir_lookup(&mut dir_inode, name_str, &mut off)
+    let ip = fs::dir_lookup(&mut dir_inode, name.as_ptr(), &mut off)
         .into_result()
         .map_err(|_| SysFileError::IllegalFileName);
 
@@ -183,9 +181,8 @@ fn create(
         })?;
 
     let mut dir_inode = fs::ilock(&dp);
-    let name_str = core::str::from_utf8(&name).unwrap();
 
-    let ip = fs::dir_lookup(&mut dir_inode, name_str, null_mut());
+    let ip = fs::dir_lookup(&mut dir_inode, name.as_ptr(), null_mut());
     let ip = match ip {
         Some(p) => {
             fs::iunlock(dir_inode);
@@ -211,12 +208,16 @@ fn create(
         fs::iupdate(&dir_inode);
         // no ip->nlink++ for "."; avoid cyclic ref count.
         let inum = inode.get_inum();
-        if !fs::dir_link(&mut inode, ".", inum) || !fs::dir_link(&mut inode, "..", inum) {
+        let dot1 = ['.' as u8, 0];
+        let dot2 = ['.' as u8, '.' as u8, 0];
+        if !fs::dir_link(&mut inode, dot1.as_ptr(), inum)
+            || !fs::dir_link(&mut inode, dot2.as_ptr(), inum)
+        {
             panic!("create: failed to create dots");
         }
     }
 
-    if !fs::dir_link(&mut dir_inode, name_str, inode.get_inum()) {
+    if !fs::dir_link(&mut dir_inode, name.as_ptr(), inode.get_inum()) {
         panic!("create: failed to dir_link");
     }
 
