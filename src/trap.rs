@@ -365,11 +365,7 @@ fn trap_dispatch(tf: &mut Trapframe) {
     if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
         lapic::eoi();
     } else if tf.tf_trapno == (IRQ_OFFSET + IRQ_IDE) as u32 {
-        // Don't send EOI to lapic because interrupt comes from 8259A.
-        // AEOI mode is enabled (see picirq.rs), so manual EOI is not also necessary for 8259A.
-        // lapic::eoi();
-
-        ide::ide_intr();
+        panic!("unexpected interrupt from IDE");
     } else if tf.tf_trapno == T_SYSCALL {
         unsafe {
             let ret = syscall::syscall(
