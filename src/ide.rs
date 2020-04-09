@@ -45,65 +45,6 @@ mod consts {
     pub(crate) const IDE_CMD_WRMUL: u8 = 0xc5;
 }
 
-struct BufQueue {
-    head: *mut Buf,
-    len: usize,
-}
-
-unsafe impl Sync for BufQueue {}
-unsafe impl Send for BufQueue {}
-
-impl BufQueue {
-    const fn new() -> BufQueue {
-        BufQueue {
-            head: null_mut(),
-            len: 0,
-        }
-    }
-
-    fn size(&self) -> usize {
-        self.len
-    }
-
-    fn push(&mut self, b: *mut Buf) {
-        unsafe {
-            if self.head.is_null() {
-                self.head = b;
-            } else {
-                let mut prev = self.head;
-                while !(*prev).qnext.is_null() {
-                    prev = (*prev).qnext;
-                }
-                (*prev).qnext = b;
-            }
-            self.len += 1;
-        }
-    }
-
-    fn pop(&mut self) -> Option<*mut Buf> {
-        unsafe {
-            if self.head.is_null() {
-                None
-            } else {
-                let res = self.head;
-                self.head = (*self.head).qnext;
-                self.len -= 1;
-                Some(res)
-            }
-        }
-    }
-
-    fn top(&mut self) -> Option<*mut Buf> {
-        if self.head.is_null() {
-            return None;
-        } else {
-            Some(self.head)
-        }
-    }
-}
-
-static BUF_QUEUE: Mutex<BufQueue> = Mutex::new(BufQueue::new());
-
 /// Wait until disk to be ready.
 fn ide_wait_ready(check_error: bool) -> bool {
     let mut r: u8;
@@ -182,9 +123,8 @@ fn ide_start(b: &Buf) {
     }
 
     // This is Device Control Register? (7.2.6 in Spec).
-    // This enables to generate interrupt?
-    // This exists only in xv6 not in JOS, so may be not mandatory.
-    x86::outb(PRIMARY_CONTROL_BASE_REG, 0); // generate interrupt
+    // Disables interrupt and perform polling when read and write
+    x86::outb(PRIMARY_CONTROL_BASE_REG, (1 << 1) | (1 << 3));
 
     // This register contains the number of sectors of data requested to be transferred
     // on a read or write operation between the host and the drive.
@@ -229,41 +169,6 @@ fn ide_start(b: &Buf) {
     }
 }
 
-/// Interrupt handler.
-pub(crate) fn ide_intr() {
-    // The first queued buffer is the active request.
-    let mut queue = BUF_QUEUE.lock();
-
-    if let Some(b) = queue.pop() {
-        let b = unsafe { &mut *b };
-
-        if !ide_wait_ready(true) {
-            panic!("ide_intr: something bad occurred.");
-        }
-
-        // Read data if needed.
-        if b.flags & BUF_FLAGS_DIRTY == 0 {
-            x86::insl(
-                PRIMARY_COMMAND_BASE_REG + REG_DATA,
-                b.data.as_mut_ptr().cast::<u32>(),
-                BLK_SIZE / 4,
-            );
-        }
-
-        b.flags |= BUF_FLAGS_VALID;
-        b.flags &= !BUF_FLAGS_DIRTY;
-
-        // Wake process waiting for this buf.
-        // wakeup(b);
-
-        // Stat disk on next buf in queue
-        if let Some(next_b) = queue.top() {
-            let next_b = unsafe { &mut *next_b };
-            ide_start(next_b);
-        }
-    }
-}
-
 /// Sync buf with disk.
 /// If B_DIRTY is set, write buf to disk, clear B_DIRTY, set B_VALID.
 /// Else if B_VALID is not set, read buf from disk, set B_VALID.
@@ -272,32 +177,30 @@ pub(crate) fn ide_rw(b: &mut Buf) {
         panic!("ide_rw: nothing to do");
     }
 
-    {
-        let mut queue = BUF_QUEUE.lock();
+    // read or write
+    ide_start(b);
 
-        // Append b to queue
-        b.qnext = null_mut();
-        queue.push(b);
-
-        // There is only one Buf, which is one just appended.
-        if queue.size() == 1 {
-            ide_start(b);
-        }
+    // wait by polling
+    if !ide_wait_ready(true) {
+        panic!("ide_intr: something bad occurred.");
     }
 
-    // Wait for request to finish.
-    x86::sti();
-    while (b.flags & (BUF_FLAGS_VALID | BUF_FLAGS_DIRTY)) != BUF_FLAGS_VALID {
-        // TODO: Remove sti and cli when log_init is executed in the init process.
-        // sleep(b, &idelock);
+    // Read data if needed.
+    if b.flags & BUF_FLAGS_DIRTY == 0 {
+        x86::insl(
+            PRIMARY_COMMAND_BASE_REG + REG_DATA,
+            b.data.as_mut_ptr().cast::<u32>(),
+            BLK_SIZE / 4,
+        );
     }
-    x86::cli();
+
+    // Change flags as completed
+    b.flags |= BUF_FLAGS_VALID;
+    b.flags &= !BUF_FLAGS_DIRTY;
 }
 
 pub(crate) fn ide_init() {
     if !ide_probe_disk1() {
         panic!("Device 1 must be available");
     }
-
-    picirq::unmask_8259a(IRQ_IDE);
 }

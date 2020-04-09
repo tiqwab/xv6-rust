@@ -20,7 +20,6 @@ pub(crate) struct Buf {
     pub(crate) blockno: u32,
     // lock: SleepLock,
     pub(crate) refcnt: u32,
-    pub(crate) qnext: *mut Buf, // disk queue
     pub(crate) data: [u8; BLK_SIZE],
 }
 
@@ -31,7 +30,6 @@ impl Buf {
             dev: 0,
             blockno: 0,
             refcnt: 0,
-            qnext: null_mut(),
             data: [0; BLK_SIZE],
         }
     }
