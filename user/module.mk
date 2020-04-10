@@ -4,6 +4,7 @@ UPROGS += \
 	$(OBJDIR)/user/yield \
 	$(OBJDIR)/user/forktest \
 	$(OBJDIR)/user/spin \
+	$(OBJDIR)/user/init \
 
 include user/lib/module.mk
 

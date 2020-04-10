@@ -1,8 +1,9 @@
 use crate::buf::consts::BUF_FLAGS_DIRTY;
 use crate::buf::BufCacheHandler;
-use crate::constants::{BLK_SIZE, LOG_SIZE, MAX_OP_BLOCKS};
+use crate::constants::{BLK_SIZE, LOG_SIZE, MAX_OP_BLOCKS, ROOT_DEV};
+use crate::once::Once;
 use crate::pmap::VirtAddr;
-use crate::spinlock::Mutex;
+use crate::spinlock::{Mutex, MutexGuard};
 use crate::{buf, superblock, util};
 use core::mem;
 
@@ -43,27 +44,29 @@ struct Log {
 }
 
 impl Log {
-    /// Create a new empty Log.
-    /// It should be initialized with log_init.
-    const fn empty() -> Log {
+    /// Create a new Log.
+    fn new(start: usize, size: usize, dev: u32) -> Log {
         Log {
-            start: 0,
-            size: 0,
+            start,
+            size,
             outstanding: 0,
-            // committing: false,
-            dev: 0,
+            dev,
             lh: LogHeader::empty(),
         }
     }
 }
 
-static LOG: Mutex<Log> = Mutex::new(Log::empty());
+static LOG: Once<Mutex<Log>> = Once::new();
+
+fn get_log() -> MutexGuard<'static, Log> {
+    LOG.call_once(|| Mutex::new(log_init(ROOT_DEV))).lock()
+}
 
 /// Called at the start of each FS system call.
 pub(crate) fn begin_op() {
     // xv6 use sleep to wait, but use spin here for the simplicity.
     loop {
-        let mut log = LOG.lock();
+        let mut log = get_log();
 
         if log.lh.n + (log.outstanding + 1) * MAX_OP_BLOCKS > LOG_SIZE {
             // this op might exhaust log space; wait for commit
@@ -78,7 +81,7 @@ pub(crate) fn begin_op() {
 /// Called at the end of each FS system call.
 /// Commits if this was the last outstanding operation.
 pub(crate) fn end_op() {
-    let mut log = LOG.lock();
+    let mut log = get_log();
 
     log.outstanding -= 1;
 
@@ -200,7 +203,7 @@ fn recover_from_log(log: &mut Log) {
 ///   log_write(bp)
 ///   brelse(bp)
 pub(crate) fn log_write(buf: &mut BufCacheHandler) {
-    let mut log = LOG.lock();
+    let mut log = get_log();
 
     // FIXME: LOG_SIZE and log.size have the same value, don't they?
     if log.lh.n >= LOG_SIZE || log.lh.n >= log.size - 1 {
@@ -233,23 +236,20 @@ pub(crate) fn log_write(buf: &mut BufCacheHandler) {
     buf.make_dirty(); // prevent eviction
 }
 
-pub(crate) fn log_init(dev: u32) {
+fn log_init(dev: u32) -> Log {
     if mem::size_of::<LogHeader>() >= BLK_SIZE {
         panic!("log_init: too big logheader");
     }
 
-    {
-        let sb = superblock::get();
-        let mut log = LOG.lock();
-        log.start = sb.log_start as usize;
-        log.size = sb.nlog as usize;
-        log.dev = dev;
+    let sb = superblock::get();
+    let mut log = Log::new(sb.log_start as usize, sb.nlog as usize, dev);
 
-        println!(
-            "log_init: start = {}, size = {}, dev = {}",
-            log.start, log.size, log.dev
-        );
+    println!(
+        "log_init: start = {}, size = {}, dev = {}",
+        log.start, log.size, log.dev
+    );
 
-        recover_from_log(&mut log);
-    }
+    recover_from_log(&mut log);
+
+    log
 }

@@ -105,9 +105,9 @@ pub fn lib_main() {
 
     ide::ide_init();
     buf::buf_init();
-    log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
+    // log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
 
-    fs::fs_test(1);
+    // fs::fs_test(1);
 
     print!("H");
     println!("ello");
@@ -115,7 +115,7 @@ pub fn lib_main() {
 
     {
         let mut env_table = env::env_table();
-        env::env_create_for_hello(&mut env_table);
+        // env::env_create_for_hello(&mut env_table);
 
         // env::env_create_for_yield(&mut env_table);
         // env::env_create_for_yield(&mut env_table);
@@ -123,7 +123,9 @@ pub fn lib_main() {
 
         // env::env_create_for_forktest(&mut env_table);
 
-        env::env_create_for_spin(&mut env_table);
+        // env::env_create_for_spin(&mut env_table);
+
+        env::env_create_for_init(&mut env_table);
     }
 
     mp::boot_aps();

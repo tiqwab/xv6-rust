@@ -1,9 +1,9 @@
 // This file comes from kern/syscall.c in jos. See COPYRIGHT for copyright information.
 
-use crate::env;
 use crate::env::EnvId;
 use crate::pmap::VirtAddr;
 use crate::sched;
+use crate::{env, sysfile};
 use consts::*;
 use core::slice;
 use core::str;
@@ -16,6 +16,7 @@ mod consts {
     pub(crate) static SYS_GET_ENV_ID: u32 = 4;
     pub(crate) static SYS_FORK: u32 = 5;
     pub(crate) static SYS_KILL: u32 = 6;
+    pub(crate) static SYS_EXEC: u32 = 7;
 }
 
 fn sys_cputs(s: &str) {
@@ -78,6 +79,12 @@ pub(crate) unsafe fn syscall(
         let env_id = EnvId(a1);
         let env_table = env::env_table();
         env::env_destroy(env_id, env_table);
+        0
+    } else if syscall_no == SYS_EXEC {
+        let path = a1 as *const u8;
+        sysfile::exec(path).unwrap_or_else(|err| {
+            println!("Error occurred: {}", sysfile::str_error(err));
+        });
         0
     } else {
         panic!("unknown syscall");

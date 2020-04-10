@@ -22,6 +22,14 @@ pub(crate) enum SysFileError {
     TooManyFileDescriptors,
 }
 
+pub(crate) fn str_error(err: SysFileError) -> &'static str {
+    match err {
+        SysFileError::IllegalFileName => "illegal file name",
+        SysFileError::TooManyFiles => "open too many files",
+        SysFileError::TooManyFileDescriptors => "open too many file descriptors",
+    }
+}
+
 // Create the path new as a link to the same inode as old.
 pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
     log::begin_op();
@@ -331,5 +339,11 @@ pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
     cur_env.change_cwd(&ip);
     log::end_op();
 
+    Ok(())
+}
+
+pub(crate) fn exec(path: *const u8) -> Result<(), SysFileError> {
+    let env = env::cur_env_mut().unwrap();
+    env::exec(path, env);
     Ok(())
 }

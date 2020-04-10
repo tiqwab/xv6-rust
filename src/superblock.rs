@@ -57,6 +57,10 @@ fn read_sb(dev: u32) -> SuperBlock {
 
     let disk_sb = unsafe { &*data.as_ptr().cast::<SuperBlock>() };
     sb.init(disk_sb);
+    println!(
+        "log_start: {}, inode_start: {}, bmap_start: {}",
+        sb.log_start, sb.inode_start, sb.bmap_start
+    );
 
     bcache.release(b);
 

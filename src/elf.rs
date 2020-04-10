@@ -25,7 +25,7 @@ impl ElfParser {
     }
 
     pub(crate) fn entry_point(&self) -> VirtAddr {
-        VirtAddr(self.elf.e_entry)
+        self.elf.entry_point()
     }
 }
 
@@ -53,11 +53,19 @@ pub(crate) struct Elf {
 impl Elf {
     pub(crate) unsafe fn new(binary: *const u8) -> Option<&'static Elf> {
         let elf = &(*(binary as *const Elf)) as &Elf;
-        if elf.e_magic != ELF_MAGIC {
-            None
-        } else {
+        if elf.is_valid() {
             Some(elf)
+        } else {
+            None
         }
+    }
+
+    pub(crate) fn is_valid(&self) -> bool {
+        self.e_magic == ELF_MAGIC
+    }
+
+    pub(crate) fn entry_point(&self) -> VirtAddr {
+        VirtAddr(self.e_entry)
     }
 }
 

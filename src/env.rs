@@ -2,13 +2,13 @@ use alloc::boxed::Box;
 use core::ptr::{null, null_mut};
 
 use crate::constants::*;
-use crate::elf::{ElfParser, ProghdrType};
-use crate::pmap::{PageDirectory, VirtAddr, PDX};
+use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType};
+use crate::pmap::{PageDirectory, PhysAddr, VirtAddr, PDX};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
-use crate::{fs, mpconfig, pmap, sched, util, x86};
-use core::fmt;
+use crate::{fs, log, mpconfig, pmap, sched, util, x86};
 use core::fmt::{Error, Formatter};
+use core::{cmp, fmt, mem};
 
 const LOG2ENV: u32 = 10;
 const NENV: u32 = 1 << LOG2ENV;
@@ -107,6 +107,10 @@ impl Env {
         self.env_id
     }
 
+    pub(crate) fn get_pgdir_paddr(&mut self) -> PhysAddr {
+        self.env_pgdir.paddr().unwrap()
+    }
+
     pub(crate) fn get_cwd(&self) -> &Arc<RwLock<Inode>> {
         &self.env_cwd.as_ref().unwrap()
     }
@@ -140,7 +144,7 @@ impl EnvTable {
         EnvId(res)
     }
 
-    fn find(&self, env_id: EnvId) -> Option<&Env> {
+    pub(crate) fn find(&self, env_id: EnvId) -> Option<&Env> {
         for env_opt in self.envs.iter() {
             if let Some(env) = env_opt {
                 if env.get_env_id() == env_id {
@@ -151,7 +155,7 @@ impl EnvTable {
         None
     }
 
-    fn find_mut(&mut self, env_id: EnvId) -> Option<&mut Env> {
+    pub(crate) fn find_mut(&mut self, env_id: EnvId) -> Option<&mut Env> {
         for env_opt in &mut self.envs.iter_mut() {
             if let Some(env) = env_opt {
                 if env.get_env_id() == env_id {
@@ -506,6 +510,26 @@ mod temporary {
 
         env_id
     }
+
+    pub(crate) fn env_create_for_init(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_init_start: u8;
+            static _binary_obj_user_init_end: u8;
+            static _binary_obj_user_init_size: usize;
+        }
+
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+
+        unsafe {
+            let user_init_start = &_binary_obj_user_init_start as *const u8;
+            let _user_init_end = &_binary_obj_user_init_end as *const u8;
+            let _user_init_size = &_binary_obj_user_init_size as *const usize;
+
+            env_table.load_icode(env_id, user_init_start);
+        }
+
+        env_id
+    }
 }
 
 /// Restores the register values in the Trapframe with the 'iret' instruction.
@@ -600,4 +624,113 @@ pub(crate) fn user_mem_assert(env: &mut Env, va: VirtAddr, len: usize, perm: u32
 pub(crate) fn fork(parent: &mut Env) -> EnvId {
     let mut env_table = env_table();
     env_table.fork(parent)
+}
+
+fn load_from_disk(mut dst: VirtAddr, inode: &mut Inode, mut off: u32, mut remain_sz: u32) {
+    while remain_sz > 0 {
+        let sz = cmp::min(PGSIZE, remain_sz);
+        if fs::readi(inode, dst.as_mut_ptr(), off, sz) != sz {
+            panic!("load_from_disk: failed to readi");
+        }
+        dst += sz;
+        off += sz;
+        remain_sz -= sz;
+    }
+}
+
+pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
+    // TODO: accept argv (and copy it same as path)
+
+    // copy path before replace pgdir
+    let path = [0 as u8; DIR_SIZ];
+    unsafe {
+        let dst = VirtAddr(&path as *const _ as *const u8 as u32);
+        let src = VirtAddr(orig_path as *const u8 as u32);
+        util::memcpy(dst, src, DIR_SIZ);
+    }
+
+    // Allocate and set up the page directory for this environment.
+    let new_pgdir = env_setup_vm();
+    env.env_pgdir = new_pgdir;
+
+    // Change page directory to that of env temporally
+    x86::lcr3(env.get_pgdir_paddr());
+
+    log::begin_op();
+
+    let ip = fs::namei(path.as_ptr()).unwrap();
+
+    let mut inode = fs::ilock(&ip);
+
+    // Read ELF header
+    let mut buf_elf = [0 as u8; mem::size_of::<Elf>()];
+    let elf = unsafe { &*(buf_elf.as_ptr() as *const Elf) };
+    if fs::readi(
+        &mut inode,
+        buf_elf.as_mut_ptr(),
+        0,
+        mem::size_of::<Elf>() as u32,
+    ) != mem::size_of::<Elf>() as u32
+    {
+        panic!("exec: failed to read elf header")
+    }
+    if !elf.is_valid() {
+        panic!("exec: illgal elf header");
+    }
+
+    let mut buf_ph = [0 as u8; mem::size_of::<Proghdr>()];
+    let ph = unsafe { &*(buf_ph.as_ptr() as *const Proghdr) };
+
+    // Read program header and set up memory
+    for i in 0..elf.e_phnum {
+        let bs = {
+            let off = elf.e_phoff + (mem::size_of::<Proghdr>() as u32) * (i as u32);
+            if fs::readi(
+                &mut inode,
+                buf_ph.as_mut_ptr(),
+                off,
+                mem::size_of::<Proghdr>() as u32,
+            ) != mem::size_of::<Proghdr>() as u32
+            {
+                panic!("exec: failed to read program header");
+            }
+        };
+
+        if ph.p_type != ProghdrType::PtLoad {
+            continue;
+        }
+
+        let dest_va = VirtAddr(ph.p_vaddr);
+        let memsz = ph.p_memsz as usize;
+        let filesz = ph.p_filesz as usize;
+
+        // Allocation necessary memory
+        env.env_pgdir.as_mut().region_alloc(dest_va, memsz);
+
+        // Load data from disk (and occupy zero)
+        unsafe {
+            load_from_disk(dest_va, &mut inode, ph.p_offset, filesz as u32);
+            // util::memcpy(dest_va, src_va, filesz);
+            util::memset(dest_va + filesz, 0, memsz - filesz);
+        }
+    }
+
+    fs::iunlock(inode);
+    log::end_op();
+
+    // Now map one page for the program's initial stack
+    // at virtual address USTACKTOP - PGSIZE.
+    let stack_base = VirtAddr(USTACKTOP - PGSIZE);
+    let stack_size = PGSIZE as usize;
+    env.env_pgdir.region_alloc(stack_base, stack_size);
+
+    // Set up appropriate initial values for the segment registers.
+    // You will set e->env_tf.tf_eip later.
+    let new_tf = Trapframe::new_for_user();
+    env.env_tf = new_tf;
+
+    // Set trapframe
+    env.set_entry_point(elf.entry_point());
+
+    // TODO: is there any other things to do here?
 }

@@ -1,4 +1,4 @@
-use crate::buf::{buf_cache, BufCacheHandler};
+use crate::buf::{buf_cache, BufCache, BufCacheHandler};
 use crate::constants::*;
 use crate::once::Once;
 use crate::pmap::VirtAddr;
@@ -16,8 +16,8 @@ use core::ptr::{null, null_mut, slice_from_raw_parts};
 #[repr(u16)]
 pub(crate) enum InodeType {
     Empty,
-    File,
     Dir,
+    File,
     Dev,
 }
 
@@ -85,37 +85,38 @@ impl Inode {
     }
 
     /// Return blockno of data at off bytes
-    fn block_for(&mut self, off: u32) -> u32 {
-        let mut blockno = (off as usize) / BLK_SIZE;
-        if blockno < NDIRECT {
-            if self.addrs[blockno] == 0 {
-                self.addrs[blockno] = balloc(self.dev);
+    fn block_for(&mut self, off: u32, bcache: &mut BufCache) -> u32 {
+        let mut off_as_blk = (off as usize) / BLK_SIZE;
+        if off_as_blk < NDIRECT {
+            if self.addrs[off_as_blk] == 0 {
+                self.addrs[off_as_blk] = balloc(self.dev);
             }
-            return self.addrs[blockno];
+            return self.addrs[off_as_blk];
         }
 
-        blockno -= NDIRECT;
+        off_as_blk -= NDIRECT;
 
-        if blockno < NINDIRECT {
+        if off_as_blk < NINDIRECT {
             // load indirect block, allocating if necessary
             if self.addrs[NDIRECT] == 0 {
                 self.addrs[NDIRECT] = balloc(self.dev);
             }
 
-            let mut bcache = buf::buf_cache();
             let mut bp = bcache.get(self.dev, self.addrs[NDIRECT]);
             bp.read();
 
-            let ap = unsafe { &mut *bp.data_mut().as_mut_ptr().cast::<u32>().add(blockno) };
+            let ap = unsafe { &mut *bp.data_mut().as_mut_ptr().cast::<u32>().add(off_as_blk) };
             if *ap == 0 {
                 *ap = balloc(self.dev);
                 log::log_write(&mut bp);
             }
 
+            let block = *ap;
             bcache.release(bp);
+            return block;
         }
 
-        panic!("addr_for: out of ranse");
+        panic!("addr_for: out of range");
     }
 }
 
@@ -259,11 +260,17 @@ fn iget(dev: u32, inum: u32) -> Arc<RwLock<Inode>> {
     let mut icache = inode_cache().lock();
 
     match icache.get(dev, inum) {
-        Some(ip) => ip,
-        None => match icache.create(dev, inum) {
-            Some(ip) => ip,
-            None => panic!("iget: no inodes"),
-        },
+        Some(ip) => {
+            println!("[iget] found inum {}", inum);
+            ip
+        }
+        None => {
+            println!("[iget] not found inum {}", inum);
+            match icache.create(dev, inum) {
+                Some(ip) => ip,
+                None => panic!("iget: no inodes"),
+            }
+        }
     }
 }
 
@@ -313,6 +320,13 @@ pub(crate) fn ilock(ip: &Arc<RwLock<Inode>>) -> RwLockWriteGuard<'_, Inode> {
 
     // read data from disk
     let inode = &mut *lk;
+
+    println!(
+        "[ilock] inode {} is in block {}",
+        inode.inum,
+        block_for_inode(inode.inum, sb)
+    );
+
     if !inode.valid {
         let mut bcache = buf::buf_cache();
         let mut bp = bcache.get(inode.dev, block_for_inode(inode.inum, sb));
@@ -326,7 +340,6 @@ pub(crate) fn ilock(ip: &Arc<RwLock<Inode>>) -> RwLockWriteGuard<'_, Inode> {
         inode.nlink = dinode.nlink;
         inode.size = dinode.size;
         unsafe {
-            println!("size_of(ip.addrs): {}", mem::size_of_val(&inode.addrs));
             util::memmove(
                 VirtAddr(inode.addrs.as_ptr() as u32),
                 VirtAddr(dinode.addrs.as_ptr() as u32),
@@ -436,17 +449,20 @@ pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u3
         n = inode.size - off;
     }
 
+    println!("[readi] inum: {}, off: {}, n: {}", inode.inum, off, n);
+
     let mut bcache = buf::buf_cache();
     let mut tot = 0;
     while tot < n {
-        let mut bp = bcache.get(inode.dev, inode.block_for(off));
+        let block = inode.block_for(off, &mut bcache);
+        let mut bp = bcache.get(inode.dev, block);
         bp.read();
 
         let m = min(n - tot, (BLK_SIZE as u32) - off % (BLK_SIZE as u32));
         unsafe {
             util::memmove(
                 VirtAddr(dst as u32),
-                VirtAddr(bp.data().as_ptr() as u32),
+                VirtAddr(bp.data().as_ptr().add((off as usize) % BLK_SIZE) as u32),
                 m as usize,
             )
         };
@@ -474,10 +490,13 @@ pub(crate) fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32
         panic!("writei: too large offset");
     }
 
+    println!("[writei] inum: {}, off: {}, n: {}", inode.inum, off, n);
+
     let mut bcache = buf::buf_cache();
     let mut tot = 0;
     while tot < n {
-        let mut bp = bcache.get(inode.dev, inode.block_for(off));
+        let block = inode.block_for(off, &mut bcache);
+        let mut bp = bcache.get(inode.dev, block);
         bp.read();
 
         let m = min(n - tot, (BLK_SIZE as u32) - off % (BLK_SIZE as u32));
@@ -587,6 +606,7 @@ fn bfree(dev: u32, blockno: u32) {
 // Dir
 // ---------------------------------------------------------------------------------
 
+#[repr(C)]
 pub(crate) struct DirEnt {
     inum: u32,
     name: [u8; DIR_SIZ],
@@ -626,6 +646,16 @@ impl DirEnt {
     }
 }
 
+/// This is just for debug.
+fn print_file_name(label: &str, p: *const u8) {
+    let mut buf = [0 as u8; DIR_SIZ];
+    for i in 0..(util::strnlen(p, DIR_SIZ)) {
+        buf[i] = unsafe { *p.add(i) };
+    }
+    let sli = core::str::from_utf8(&buf).unwrap();
+    println!("{}: {}", label, sli);
+}
+
 pub(crate) fn dir_lookup(
     dir: &mut Inode,
     name: *const u8,
@@ -639,11 +669,19 @@ pub(crate) fn dir_lookup(
     let mut ent = DirEnt::empty();
     let mut off = 0;
 
+    println!(
+        "[dir_lookup] dir.inum: {}, dir.size: {}",
+        dir.inum, dir.size
+    );
+
     while off < dir.size {
         let ptr = ent.as_u8_mut_ptr();
         if readi(dir, ptr, off, dir_ent_size) != dir_ent_size {
             panic!("dir_lookup: failed to readi");
         }
+
+        print!("[dir_lookup] ent.inum: {}, ", ent.inum);
+        print_file_name("ent.name", ent.name.as_ptr());
 
         if ent.inum != 0 {
             if util::strncmp(name, ent.name.as_ptr(), DIR_SIZ) == 0 {
@@ -783,7 +821,7 @@ fn namex(mut path: *const u8, does_want_parent: bool, name: *mut u8) -> Option<A
 
             let mut inode = ilock(&ip);
 
-            if inode.typ == InodeType::Dir {
+            if !inode.is_dir() {
                 iunlock(inode);
                 iput(ip);
                 return None;

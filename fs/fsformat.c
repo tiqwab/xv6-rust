@@ -120,21 +120,21 @@ int main(int argc, char *argv[]) {
   assert(rootino == ROOTINO);
 
   memset(&de, 0, sizeof(de));
-  de.inum = xshort(rootino);
+  de.inum = xint(rootino);
   strcpy(de.name, ".");
   iappend(rootino, &de, sizeof(de));
 
   memset(&de, 0, sizeof(de));
-  de.inum = xshort(rootino);
+  de.inum = xint(rootino);
   strcpy(de.name, "..");
   iappend(rootino, &de, sizeof(de));
 
   for(i = 2; i < argc; i++){
     char *file_name = strrchr(argv[i], '/');
     if (file_name == 0) {
-        file_name++;
-    } else {
         file_name = argv[i];
+    } else {
+        file_name++;
     }
     assert(strnlen(file_name, DIRSIZ + 1) <= DIRSIZ);
 
