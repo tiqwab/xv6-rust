@@ -5,6 +5,7 @@
 use crate::kbd::consts::*;
 use crate::trap::consts::IRQ_KBD;
 use crate::{picirq, x86};
+use core::ptr::null;
 
 mod consts {
     // I/O port
@@ -13,26 +14,59 @@ mod consts {
 
     // flags for status register
     pub(crate) const STATUS_FL_DIB: u8 = 0x01; // kbd data in buffer. must be set before attempting to read data from IO port 0x60)
+
+    // flags of shift
+    pub(crate) const SHIFT_FL_SHIFT: u8 = 1 << 0;
+    pub(crate) const SHIFT_FL_CTL: u8 = 1 << 1;
+    pub(crate) const SHIFT_FL_ALT: u8 = 1 << 2;
+    pub(crate) const SHIFT_FL_E0ESC: u8 = 1 << 6; // some keys have 0xe0 escape (e.g. cursor right)
+
+    pub(crate) const KEY_RELEASED: u8 = 1 << 7; // input data at this bit is on when key is released.
 }
 
 extern "C" {
+    static shift_code: [u8; 256];
     static normal_map: [u8; 256];
+    static shift_map: [u8; 256];
 }
 
 pub(crate) fn kbd_getc() -> Option<u8> {
     unsafe {
+        static mut shift: u8 = 0;
+        let char_code: [&[u8; 256]; 4] = [&normal_map, &shift_map, &normal_map, &normal_map];
+
         let st = x86::inb(PORT_STATUS);
         if (st & STATUS_FL_DIB) == 0 {
             return None;
         }
 
-        let data = x86::inb(PORT_DATA);
-        println!(
-            "kbd raw data: {:x}, as ascii: {}",
-            data, normal_map[data as usize] as char
-        );
+        let mut data = x86::inb(PORT_DATA);
 
-        Some(data)
+        if data == 0xe0 {
+            shift |= SHIFT_FL_E0ESC;
+            return None;
+        } else if data & 0x80 != 0 {
+            // Key released
+            data = if shift & SHIFT_FL_E0ESC != 0 {
+                data
+            } else {
+                data & !KEY_RELEASED
+            };
+            shift &= !(shift_code[data as usize] | SHIFT_FL_E0ESC);
+            return None;
+        } else if shift & SHIFT_FL_E0ESC != 0 {
+            // Last character was an E0 escape; or with 0x80
+            data |= KEY_RELEASED; // what is it? -> hack not to emit the valid key code?
+            shift &= !SHIFT_FL_E0ESC;
+        }
+
+        shift |= shift_code[data as usize];
+        // shift ^= toggle_code[data as usize]; // TODO
+        let c = char_code[(shift & (SHIFT_FL_CTL | SHIFT_FL_SHIFT)) as usize][data as usize];
+        // if shift & CAPSLOCK ... TODO
+
+        println!("kbd raw data: {:x}, as ascii: {}", data, c as char);
+        Some(c)
     }
 }
 
