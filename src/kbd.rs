@@ -19,6 +19,9 @@ mod consts {
     pub(crate) const SHIFT_FL_SHIFT: u8 = 1 << 0;
     pub(crate) const SHIFT_FL_CTL: u8 = 1 << 1;
     pub(crate) const SHIFT_FL_ALT: u8 = 1 << 2;
+    pub(crate) const SHIFT_FL_CAPSLOCK: u8 = 1 << 3;
+    pub(crate) const SHIFT_FL_NUMLOCK: u8 = 1 << 4;
+    pub(crate) const SHIFT_FL_SCROLLLOCK: u8 = 1 << 5;
     pub(crate) const SHIFT_FL_E0ESC: u8 = 1 << 6; // some keys have 0xe0 escape (e.g. cursor right)
 
     pub(crate) const KEY_RELEASED: u8 = 1 << 7; // input data at this bit is on when key is released.
@@ -26,14 +29,16 @@ mod consts {
 
 extern "C" {
     static shift_code: [u8; 256];
+    static toggle_code: [u8; 256];
     static normal_map: [u8; 256];
     static shift_map: [u8; 256];
+    static ctl_map: [u8; 256];
 }
 
 pub(crate) fn kbd_getc() -> Option<u8> {
     unsafe {
         static mut shift: u8 = 0;
-        let char_code: [&[u8; 256]; 4] = [&normal_map, &shift_map, &normal_map, &normal_map];
+        let char_code: [&[u8; 256]; 4] = [&normal_map, &shift_map, &ctl_map, &ctl_map];
 
         let st = x86::inb(PORT_STATUS);
         if (st & STATUS_FL_DIB) == 0 {
@@ -61,11 +66,20 @@ pub(crate) fn kbd_getc() -> Option<u8> {
         }
 
         shift |= shift_code[data as usize];
-        // shift ^= toggle_code[data as usize]; // TODO
-        let c = char_code[(shift & (SHIFT_FL_CTL | SHIFT_FL_SHIFT)) as usize][data as usize];
-        // if shift & CAPSLOCK ... TODO
+        shift ^= toggle_code[data as usize];
 
-        println!("kbd raw data: {:x}, as ascii: {}", data, c as char);
+        let mut c = char_code[(shift & (SHIFT_FL_CTL | SHIFT_FL_SHIFT)) as usize][data as usize];
+
+        if shift & SHIFT_FL_CAPSLOCK != 0 {
+            let _c = c as char;
+            if 'a' <= _c && _c <= 'z' {
+                c -= 'a' as u8 - 'A' as u8;
+            } else if 'A' <= _c && _c <= 'Z' {
+                c += 'a' as u8 - 'A' as u8;
+            }
+        }
+
+        println!("kbd raw data: 0x{:02x}, as ascii: {}", data, c as char);
         Some(c)
     }
 }
