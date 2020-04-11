@@ -5,6 +5,7 @@
 #![feature(ptr_offset_from)]
 #![feature(alloc_error_handler)]
 #![feature(const_in_array_repeat_expressions)]
+#![feature(const_raw_ptr_deref)]
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(thread_local)]
 #![feature(slice_from_raw_parts)]
@@ -27,6 +28,7 @@ mod file;
 mod fs;
 mod gdt;
 mod ide;
+mod kbd;
 mod kclock;
 mod kernel_lock;
 mod lapic;
@@ -108,6 +110,8 @@ pub fn lib_main() {
     // log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
 
     // fs::fs_test(1);
+
+    kbd::kbd_init();
 
     print!("H");
     println!("ello");

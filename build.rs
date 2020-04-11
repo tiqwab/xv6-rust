@@ -6,6 +6,7 @@ fn main() {
         .file("src/vectors.S")
         .file("src/alltraps.S")
         .file("src/mpentry.S")
+        .file("src/kbdmap.c")
         .include("inc")
         .compile("xv6rustkernel");
 }

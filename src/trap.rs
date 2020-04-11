@@ -2,7 +2,7 @@ use crate::constants::*;
 use crate::gdt::consts::*;
 use crate::gdt::TaskState;
 use crate::pmap::VirtAddr;
-use crate::{env, gdt, sched, x86};
+use crate::{env, gdt, kbd, sched, x86};
 use crate::{ide, lapic, mpconfig, syscall};
 use consts::*;
 use core::mem;
@@ -364,6 +364,8 @@ fn trap_dispatch(tf: &mut Trapframe) {
     // Handle processor exceptions.
     if tf.tf_trapno == (IRQ_OFFSET + IRQ_TIMER) as u32 {
         lapic::eoi();
+    } else if tf.tf_trapno == (IRQ_OFFSET + IRQ_KBD) as u32 {
+        kbd::kbd_getc();
     } else if tf.tf_trapno == (IRQ_OFFSET + IRQ_IDE) as u32 {
         panic!("unexpected interrupt from IDE");
     } else if tf.tf_trapno == T_SYSCALL {
@@ -410,7 +412,7 @@ extern "C" fn trap(orig_tf: *mut Trapframe) {
         "interrupts should be disabled"
     );
 
-    println!("Incoming TRAP frame at {:?}", tf as *const Trapframe);
+    // println!("Incoming TRAP frame at {:?}", tf as *const Trapframe);
 
     // Trapped from user mode
     if tf.tf_cs & 3 == 3 {
