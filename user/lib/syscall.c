@@ -14,6 +14,8 @@
 #define SYS_FORK 5
 #define SYS_KILL 6
 #define SYS_EXEC 7
+#define SYS_OPEN 8
+#define SYS_CLOSE 9
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -69,4 +71,12 @@ void sys_kill(int pid) {
 
 void sys_exec(char *pathname) {
     syscall(SYS_EXEC, (int) pathname, 0, 0, 0, 0);
+}
+
+int sys_open(char *path, int mode) {
+    return syscall(SYS_OPEN, (int) path, mode, 0, 0, 0);
+}
+
+int sys_close(int fd) {
+    return syscall(SYS_CLOSE, fd, 0, 0, 0, 0);
 }

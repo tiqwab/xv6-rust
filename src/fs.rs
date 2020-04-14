@@ -256,7 +256,7 @@ pub(crate) fn ialloc(dev: u32, typ: InodeType, major: u16, minor: u16) -> Arc<Rw
 /// Find the inode with number inum on device dev
 /// and return the in-memory copy. Does not lock
 /// the inode and does not read it from disk.
-fn iget(dev: u32, inum: u32) -> Arc<RwLock<Inode>> {
+pub(crate) fn iget(dev: u32, inum: u32) -> Arc<RwLock<Inode>> {
     let mut icache = inode_cache().lock();
 
     match icache.get(dev, inum) {

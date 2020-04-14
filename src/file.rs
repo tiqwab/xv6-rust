@@ -165,14 +165,6 @@ impl FileTable {
         None
     }
 
-    /// Increment ref count for file f.
-    pub(crate) fn dup(&self, entry: &mut Arc<FileTableEntry>) -> FileTableEntry {
-        FileTableEntry {
-            file: Arc::clone(&entry.file),
-            index: entry.index,
-        }
-    }
-
     /// Close file f. (Decrement ref count, close when reaches 0.)
     pub(crate) fn close(&mut self, entry: FileTableEntry) {
         let ref_cnt = Arc::strong_count(&entry.file);

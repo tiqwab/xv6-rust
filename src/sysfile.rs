@@ -234,10 +234,11 @@ fn create(
 }
 
 /// Allocate a file descriptor for the given file.
-// Takes over file reference from caller on success.
-fn fd_alloc(ent: &FileTableEntry) -> Option<FileDescriptor> {
+/// Takes over file reference from caller on success.
+/// Return the passed ent when an error occurred.
+fn fd_alloc(ent: FileTableEntry) -> Result<FileDescriptor, FileTableEntry> {
     let cur_env = env::cur_env_mut().unwrap();
-    cur_env.fd_alloc(&ent.file)
+    cur_env.fd_alloc(ent)
 }
 
 pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFileError> {
@@ -274,29 +275,37 @@ pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFile
     let readable = mode & O_WRONLY == 0;
     let writable = (mode & O_WRONLY != 0) || (mode & O_RDWR != 0);
 
-    let f_opt = ft.alloc_as_inode(readable, writable, &ip);
-    let fd_opt = f_opt.as_ref().and_then(|f| fd_alloc(f));
-    let (_f, fd) = match (f_opt, fd_opt) {
-        (Some(f), Some(fd)) => (f, fd),
-        (Some(f), _) => {
-            ft.close(f);
+    match ft.alloc_as_inode(readable, writable, &ip) {
+        None => {
             fs::iunlock(inode);
             fs::iput(ip);
             log::end_op();
-            return Err(SysFileError::TooManyFileDescriptors);
+            Err(SysFileError::TooManyFiles)
         }
-        (_, _) => {
-            fs::iunlock(inode);
-            fs::iput(ip);
-            log::end_op();
-            return Err(SysFileError::TooManyFiles);
+        Some(ent) => {
+            let fd_opt = fd_alloc(ent);
+            match fd_opt {
+                Err(ent) => {
+                    ft.close(ent);
+                    fs::iunlock(inode);
+                    fs::iput(ip);
+                    log::end_op();
+                    Err(SysFileError::TooManyFileDescriptors)
+                }
+                Ok(fd) => {
+                    fs::iunlock(inode);
+                    log::end_op();
+                    Ok(fd)
+                }
+            }
         }
-    };
+    }
+}
 
-    fs::iunlock(inode);
-    log::end_op();
-
-    Ok(fd)
+pub(crate) fn close(fd: FileDescriptor) -> Result<(), SysFileError> {
+    let ent = env::cur_env_mut().unwrap().fd_close(fd);
+    file::file_table().close(ent);
+    Ok(())
 }
 
 pub(crate) fn mkdir(path: *const u8) -> Result<(), SysFileError> {
