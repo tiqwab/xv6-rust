@@ -20,6 +20,8 @@ mod consts {
     pub(crate) static SYS_EXEC: u32 = 7;
     pub(crate) static SYS_OPEN: u32 = 8;
     pub(crate) static SYS_CLOSE: u32 = 9;
+    pub(crate) static SYS_READ: u32 = 10;
+    pub(crate) static SYS_WRITE: u32 = 11;
 }
 
 fn sys_cputs(s: &str) {
@@ -45,7 +47,7 @@ pub(crate) unsafe fn syscall(
     syscall_no: u32,
     a1: u32,
     a2: u32,
-    _a3: u32,
+    a3: u32,
     _a4: u32,
     _a5: u32,
 ) -> i32 {
@@ -105,6 +107,42 @@ pub(crate) unsafe fn syscall(
             println!("Error occurred: {}", sysfile::str_error(err));
         });
         0
+    } else if syscall_no == SYS_READ {
+        let fd = FileDescriptor(a1 as u32);
+        let buf = a2 as *mut u8;
+        let count = a3 as usize;
+        match env::cur_env_mut().unwrap().fd_get(fd) {
+            None => {
+                println!("Error occurred in read: fd {} not found", fd.0);
+                -1
+            }
+            Some(ent) => {
+                let mut f = ent.file.write();
+                f.read(buf, count).map(|cnt| cnt as i32).unwrap_or_else(|| {
+                    println!("Error occurred in read: failed to read fd {}", fd.0);
+                    -1
+                })
+            }
+        }
+    } else if syscall_no == SYS_WRITE {
+        let fd = FileDescriptor(a1 as u32);
+        let buf = a2 as *mut u8;
+        let count = a3 as usize;
+        match env::cur_env_mut().unwrap().fd_get(fd) {
+            None => {
+                println!("Error occurred in read: fd {} not found", fd.0);
+                -1
+            }
+            Some(ent) => {
+                let mut f = ent.file.write();
+                f.write(buf, count)
+                    .map(|cnt| cnt as i32)
+                    .unwrap_or_else(|| {
+                        println!("Error occurred in write: failed to write fd {}", fd.0);
+                        -1
+                    })
+            }
+        }
     } else {
         panic!("unknown syscall");
     }

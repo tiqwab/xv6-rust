@@ -131,11 +131,11 @@ impl File {
 }
 
 pub(crate) struct FileTable {
-    files: [Option<Arc<File>>; NFILE], // FIXME: should be Arc<RwLock<File>>?
+    files: [Option<Arc<RwLock<File>>>; NFILE],
 }
 
 pub(crate) struct FileTableEntry {
-    pub(crate) file: Arc<File>,
+    pub(crate) file: Arc<RwLock<File>>,
     pub(crate) index: usize,
 }
 
@@ -157,7 +157,7 @@ impl FileTable {
             if f_opt.is_none() {
                 let mut f = File::new();
                 f.init_as_inode(readable, writable, ip);
-                let f = Arc::new(f);
+                let f = Arc::new(RwLock::new(f));
                 *f_opt = Some(Arc::clone(&f));
                 return Some(FileTableEntry { file: f, index: i });
             }
@@ -174,15 +174,16 @@ impl FileTable {
         } else if ref_cnt == 2 {
             // it means only me refers to the file because FileTable itself has one reference.
             let ind = entry.index;
-            let typ = entry.file.typ;
+            let f = entry.file.read();
+            let typ = f.typ;
 
             if typ == FileType::Pipe {
                 unimplemented!()
             } else if typ == FileType::Inode {
-                if let Some(orig_ip) = &entry.file.ip {
+                if let Some(orig_ip) = &f.ip {
                     // FIXME: how to handle ownership of ip correctly...
                     let ip = Arc::clone(orig_ip);
-                    drop(entry);
+                    // drop(entry);
 
                     log::begin_op();
                     fs::iput(ip);
@@ -203,4 +204,5 @@ pub(crate) fn file_table() -> MutexGuard<'static, FileTable> {
     FILE_TABLE.lock()
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct FileDescriptor(pub(crate) u32);

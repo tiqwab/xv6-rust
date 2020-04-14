@@ -89,7 +89,7 @@ impl Inode {
         let mut off_as_blk = (off as usize) / BLK_SIZE;
         if off_as_blk < NDIRECT {
             if self.addrs[off_as_blk] == 0 {
-                self.addrs[off_as_blk] = balloc(self.dev);
+                self.addrs[off_as_blk] = balloc(self.dev, bcache);
             }
             return self.addrs[off_as_blk];
         }
@@ -99,7 +99,7 @@ impl Inode {
         if off_as_blk < NINDIRECT {
             // load indirect block, allocating if necessary
             if self.addrs[NDIRECT] == 0 {
-                self.addrs[NDIRECT] = balloc(self.dev);
+                self.addrs[NDIRECT] = balloc(self.dev, bcache);
             }
 
             let mut bp = bcache.get(self.dev, self.addrs[NDIRECT]);
@@ -107,7 +107,7 @@ impl Inode {
 
             let ap = unsafe { &mut *bp.data_mut().as_mut_ptr().cast::<u32>().add(off_as_blk) };
             if *ap == 0 {
-                *ap = balloc(self.dev);
+                *ap = balloc(self.dev, bcache);
                 log::log_write(&mut bp);
             }
 
@@ -492,27 +492,34 @@ pub(crate) fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32
 
     println!("[writei] inum: {}, off: {}, n: {}", inode.inum, off, n);
 
-    let mut bcache = buf::buf_cache();
-    let mut tot = 0;
-    while tot < n {
-        let block = inode.block_for(off, &mut bcache);
-        let mut bp = bcache.get(inode.dev, block);
-        bp.read();
+    {
+        let mut bcache = buf::buf_cache();
+        let mut tot = 0;
+        while tot < n {
+            let block = inode.block_for(off, &mut bcache);
+            let mut bp = bcache.get(inode.dev, block);
+            bp.read();
 
-        let m = min(n - tot, (BLK_SIZE as u32) - off % (BLK_SIZE as u32));
-        unsafe {
-            util::memmove(
-                VirtAddr(bp.data().as_ptr() as u32),
-                VirtAddr(src as u32),
-                m as usize,
-            );
+            let m = min(n - tot, (BLK_SIZE as u32) - off % (BLK_SIZE as u32));
+            unsafe {
+                util::memmove(
+                    VirtAddr(bp.data().as_ptr().add(off as usize % BLK_SIZE) as u32),
+                    VirtAddr(src as u32),
+                    m as usize,
+                );
+            }
+
+            log::log_write(&mut bp);
+            bcache.release(bp);
+            tot += m;
+            off += m;
+            src = unsafe { src.add(m as usize) };
         }
+    }
 
-        log::log_write(&mut bp);
-        bcache.release(bp);
-        tot += m;
-        off += m;
-        src = unsafe { src.add(m as usize) };
+    if n > 0 && off > inode.size {
+        inode.size = off;
+        iupdate(inode);
     }
 
     n
@@ -547,12 +554,11 @@ fn block_for_bitmap(blockno: u32, sb: &SuperBlock) -> u32 {
 }
 
 /// Allocate a zeroed disk block.
-fn balloc(dev: u32) -> u32 {
+fn balloc(dev: u32, bcache: &mut BufCache) -> u32 {
     let sb = superblock::get();
 
-    let mut bcache = buf::buf_cache();
     for blockno in 0..sb.size {
-        let mut bp = bcache.get(dev, block_for_inode(blockno, sb));
+        let mut bp = bcache.get(dev, block_for_bitmap(blockno, sb));
         bp.read();
 
         let mut bi = 0;
@@ -563,7 +569,8 @@ fn balloc(dev: u32) -> u32 {
                 bp.data_mut()[bi / 8] |= m; // mark block in use
                 log::log_write(&mut bp);
                 bcache.release(bp);
-                bzero(dev, blockno + (bi as u32));
+                bzero(dev, blockno + (bi as u32), bcache);
+                println!("[balloc] allocated blockno {}", blockno + (bi as u32));
                 return blockno + (bi as u32);
             }
             bi += 1;
@@ -576,8 +583,7 @@ fn balloc(dev: u32) -> u32 {
 }
 
 /// Zero a block
-fn bzero(dev: u32, blockno: u32) {
-    let mut bcache = buf::buf_cache();
+fn bzero(dev: u32, blockno: u32, bcache: &mut BufCache) {
     let bp = bcache.get(dev, blockno);
     unsafe { util::memset(VirtAddr(bp.data().as_ptr() as u32), 0, BLK_SIZE) };
     bcache.release(bp);

@@ -142,6 +142,12 @@ impl Env {
         let ent = self.env_ofile[fd.0 as usize].take();
         ent.expect("illegal fd")
     }
+
+    pub(crate) fn fd_get(&mut self, fd: FileDescriptor) -> Option<&mut FileTableEntry> {
+        self.env_ofile
+            .get_mut(fd.0 as usize)
+            .and_then(|ent_opt| ent_opt.as_mut())
+    }
 }
 
 pub(crate) struct EnvTable {

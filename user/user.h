@@ -23,6 +23,8 @@ void sys_kill(int pid);
 void sys_exec(char *path);
 int sys_open(char *path, int mode);
 int sys_close(int fd);
+int sys_read(int fd, char *buf, int count);
+int sys_write(int fd, char *buf, int count);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
