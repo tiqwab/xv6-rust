@@ -49,8 +49,8 @@ pub(crate) struct Env {
     env_runs: u32,         // Number of times environment has run
     // FIXME: what type is better for env_pgdir?
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
-    env_cwd: Option<Arc<RwLock<Inode>>>, // Current working directory FIXME: remove option
-    env_ofile: [Option<Arc<File>>; NFILE_PER_ENV], // Open files
+    env_cwd: Arc<RwLock<Inode>>,   // Current working directory
+    env_ofile: [Option<FileTableEntry>; NFILE_PER_ENV], // Open files
 }
 
 impl PartialEq for Env {
@@ -112,23 +112,41 @@ impl Env {
     }
 
     pub(crate) fn get_cwd(&self) -> &Arc<RwLock<Inode>> {
-        &self.env_cwd.as_ref().unwrap()
+        &self.env_cwd
     }
 
     pub(crate) fn change_cwd(&mut self, ip: &Arc<RwLock<Inode>>) {
-        let old = Arc::clone(self.env_cwd.as_ref().unwrap());
+        let old = Arc::clone(&self.env_cwd);
         fs::iput(old);
-        self.env_cwd = Some(Arc::clone(ip));
+        self.env_cwd = Arc::clone(ip);
     }
 
-    pub(crate) fn fd_alloc(&mut self, f: &Arc<File>) -> Option<FileDescriptor> {
+    pub(crate) fn fd_alloc(
+        &mut self,
+        ent: FileTableEntry,
+    ) -> Result<FileDescriptor, FileTableEntry> {
         for (fd, ent_opt) in self.env_ofile.iter_mut().enumerate() {
             if ent_opt.is_none() {
-                *ent_opt = Some(Arc::clone(f));
-                return Some(FileDescriptor(fd as u32));
+                *ent_opt = Some(ent);
+                return Ok(FileDescriptor(fd as u32));
             }
         }
-        None
+        Err(ent)
+    }
+
+    pub(crate) fn fd_close(&mut self, fd: FileDescriptor) -> FileTableEntry {
+        assert!(
+            (fd.0 as usize) >= 0 && (fd.0 as usize) < self.env_ofile.len(),
+            "illegal fd"
+        );
+        let ent = self.env_ofile[fd.0 as usize].take();
+        ent.expect("illegal fd")
+    }
+
+    pub(crate) fn fd_get(&mut self, fd: FileDescriptor) -> Option<&mut FileTableEntry> {
+        self.env_ofile
+            .get_mut(fd.0 as usize)
+            .and_then(|ent_opt| ent_opt.as_mut())
     }
 }
 
@@ -207,7 +225,7 @@ impl EnvTable {
     /// Returns 0 on success, < 0 on failure.  Errors include:
     ///	-E_NO_FREE_ENV if all NENV environments are allocated
     ///	-E_NO_MEM on memory exhaustion
-    fn env_alloc(&mut self, parent_id: EnvId, typ: EnvType) -> EnvId {
+    fn env_alloc(&mut self, parent_id: EnvId, typ: EnvType, cwd: Arc<RwLock<Inode>>) -> EnvId {
         let mut idx = -1;
         for (i, env_opt) in self.envs.iter().enumerate() {
             if env_opt.is_none() {
@@ -237,7 +255,7 @@ impl EnvTable {
             env_status: EnvStatus::Runnable,
             env_runs: 0,
             env_pgdir: new_pgdir,
-            env_cwd: None,
+            env_cwd: cwd,
             env_ofile: [None; NFILE_PER_ENV],
         };
 
@@ -366,8 +384,10 @@ impl EnvTable {
     ///
     /// ref. fork() in proc.c (xv6)
     fn fork(&mut self, parent: &mut Env) -> EnvId {
+        let root_inode = fs::iget(ROOT_DEV, ROOT_INUM);
+
         // Allocate process.
-        let new_env_id = self.env_alloc(parent.env_id, EnvType::User);
+        let new_env_id = self.env_alloc(parent.env_id, EnvType::User, root_inode);
         let new_env = self.find_mut(new_env_id).unwrap();
 
         // Copy process state from parent.
@@ -413,13 +433,14 @@ fn env_setup_vm() -> Box<PageDirectory> {
     PageDirectory::new_for_user()
 }
 
-use crate::file::{File, FileDescriptor};
+use crate::file::{File, FileDescriptor, FileTableEntry};
 use crate::fs::Inode;
 use crate::rwlock::RwLock;
 use alloc::sync::Arc;
 pub(crate) use temporary::*;
 
 mod temporary {
+    use crate::constants::{ROOT_DEV, ROOT_INUM};
     use crate::env::*;
 
     /// Allocates a new env with env_alloc, loads the named elf
@@ -434,7 +455,8 @@ mod temporary {
             static _binary_obj_user_hello_size: usize;
         }
 
-        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+        let root_inode = crate::fs::iget(ROOT_DEV, ROOT_INUM);
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User, root_inode);
 
         unsafe {
             let user_hello_start = &_binary_obj_user_hello_start as *const u8;
@@ -458,7 +480,8 @@ mod temporary {
             static _binary_obj_user_yield_size: usize;
         }
 
-        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+        let root_inode = crate::fs::iget(ROOT_DEV, ROOT_INUM);
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User, root_inode);
 
         unsafe {
             let user_yield_start = &_binary_obj_user_yield_start as *const u8;
@@ -478,7 +501,8 @@ mod temporary {
             static _binary_obj_user_forktest_size: usize;
         }
 
-        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+        let root_inode = crate::fs::iget(ROOT_DEV, ROOT_INUM);
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User, root_inode);
 
         unsafe {
             let user_forktest_start = &_binary_obj_user_forktest_start as *const u8;
@@ -498,7 +522,8 @@ mod temporary {
             static _binary_obj_user_spin_size: usize;
         }
 
-        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+        let root_inode = crate::fs::iget(ROOT_DEV, ROOT_INUM);
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User, root_inode);
 
         unsafe {
             let user_spin_start = &_binary_obj_user_spin_start as *const u8;
@@ -511,6 +536,27 @@ mod temporary {
         env_id
     }
 
+    pub(crate) fn env_create_for_filetest(env_table: &mut EnvTable) -> EnvId {
+        extern "C" {
+            static _binary_obj_user_filetest_start: u8;
+            static _binary_obj_user_filetest_end: u8;
+            static _binary_obj_user_filetest_size: usize;
+        }
+
+        let root_inode = crate::fs::iget(ROOT_DEV, ROOT_INUM);
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User, root_inode);
+
+        unsafe {
+            let user_filetest_start = &_binary_obj_user_filetest_start as *const u8;
+            let _user_filetest_end = &_binary_obj_user_filetest_end as *const u8;
+            let _user_filetest_size = &_binary_obj_user_filetest_size as *const usize;
+
+            env_table.load_icode(env_id, user_filetest_start);
+        }
+
+        env_id
+    }
+
     pub(crate) fn env_create_for_init(env_table: &mut EnvTable) -> EnvId {
         extern "C" {
             static _binary_obj_user_init_start: u8;
@@ -518,7 +564,8 @@ mod temporary {
             static _binary_obj_user_init_size: usize;
         }
 
-        let env_id = env_table.env_alloc(EnvId(0), EnvType::User);
+        let root_inode = crate::fs::iget(ROOT_DEV, ROOT_INUM);
+        let env_id = env_table.env_alloc(EnvId(0), EnvType::User, root_inode);
 
         unsafe {
             let user_init_start = &_binary_obj_user_init_start as *const u8;
