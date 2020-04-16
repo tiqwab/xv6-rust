@@ -24,6 +24,7 @@ mod consts {
     pub(crate) static SYS_WRITE: u32 = 11;
     pub(crate) static SYS_MKNOD: u32 = 12;
     pub(crate) static SYS_DUP: u32 = 13;
+    pub(crate) static SYS_WAIT_ENV_ID: u32 = 14;
 }
 
 fn sys_cputs(s: &str) {
@@ -161,6 +162,12 @@ pub(crate) unsafe fn syscall(
                 println!("Error occurred: {}", sysfile::str_error(err));
                 -1
             })
+    } else if syscall_no == SYS_WAIT_ENV_ID {
+        let env_id = EnvId(a1);
+        match env::wait_env_id(env_id) {
+            None => 0,
+            Some(id) => id.0 as i32,
+        }
     } else {
         panic!("unknown syscall");
     }

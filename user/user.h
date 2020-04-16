@@ -32,6 +32,7 @@ int sys_read(int fd, char *buf, int count);
 int sys_write(int fd, char *buf, int count);
 int sys_mknod(char *path, short major, short minor);
 int sys_dup(int fd);
+int sys_wait_env_id(int pid);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);

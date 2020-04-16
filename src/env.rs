@@ -36,6 +36,7 @@ enum EnvStatus {
     Dying,
     Runnable,
     Running,
+    Zombie,
     NotRunnable,
 }
 
@@ -76,6 +77,10 @@ impl Env {
 
     pub(crate) fn is_dying(&self) -> bool {
         self.env_status == EnvStatus::Dying
+    }
+
+    pub(crate) fn is_zombie(&self) -> bool {
+        self.env_status == EnvStatus::Zombie
     }
 
     fn pause(&mut self) {
@@ -342,7 +347,8 @@ impl EnvTable {
         env.set_entry_point(elf.entry_point());
     }
 
-    /// Frees env and all memory it uses.
+    /// Frees resources and memory the env uses except for the entry of env_table.
+    /// Use wait_env_id to release the entry.
     unsafe fn env_free(&mut self, env_id: EnvId) {
         let env = self.find_mut(env_id).expect("illegal env_id");
 
@@ -392,15 +398,28 @@ impl EnvTable {
             }
         }
 
-        // return the environment to the free list
-        env.env_status = EnvStatus::Free;
+        // Change the state to zombie.
+        // Call wait_env_id to release the entry later.
+        env.env_status = EnvStatus::Zombie;
+    }
 
-        for entry_opt in self.envs.iter_mut() {
-            match entry_opt {
-                Some(entry) if entry.env_id == env_id => {
-                    *entry_opt = None;
-                }
-                _ => (),
+    /// Release the entry of EnvTable.
+    /// Parent process uses this when it waits child process.
+    fn env_release(&mut self, env_id: EnvId) -> Option<EnvId> {
+        let child_opt = self.find(env_id).and_then(|child| {
+            if !child.is_zombie() {
+                None
+            } else {
+                Some(child)
+            }
+        });
+
+        match child_opt {
+            None => None,
+            Some(_) => {
+                let idx = self.get_idx(env_id).unwrap();
+                self.envs[idx] = None;
+                Some(env_id)
             }
         }
     }
@@ -810,4 +829,9 @@ pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
     env.set_entry_point(elf.entry_point());
 
     // TODO: is there any other things to do here?
+}
+
+pub(crate) fn wait_env_id(env_id: EnvId) -> Option<EnvId> {
+    let mut env_table = env_table();
+    env_table.env_release(env_id)
 }
