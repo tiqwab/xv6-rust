@@ -1,6 +1,8 @@
-use crate::spinlock::Mutex;
-use crate::{serial, vga_buffer};
+use crate::fs::Inode;
+use crate::spinlock::{Mutex, MutexGuard};
+use crate::{kbd, sched, serial, vga_buffer, x86};
 use core::fmt;
+use core::ptr::slice_from_raw_parts;
 
 static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -23,4 +25,97 @@ macro_rules! println {
     ($($arg:tt)*) => {
         $crate::print!("{}\n", format_args!($($arg)*));
     }
+}
+
+pub(crate) fn console_write(_inode: &Inode, buf: *const u8, count: usize) -> i32 {
+    let sli = unsafe { &*slice_from_raw_parts(buf, count) };
+    match core::str::from_utf8(sli) {
+        Err(err) => {
+            println!("Error in console_write: failed to create str");
+            -1
+        }
+        Ok(str) => {
+            print!("{}", str);
+            count as i32
+        }
+    }
+}
+
+const INPUT_BUF: usize = 128;
+
+struct Input {
+    buf: [u8; INPUT_BUF],
+    r: usize, // read index
+    w: usize, // write index
+    e: usize, // edit index
+}
+
+impl Input {
+    const fn new() -> Input {
+        Input {
+            buf: [0; INPUT_BUF],
+            r: 0,
+            w: 0,
+            e: 0,
+        }
+    }
+}
+
+static INPUT: Mutex<Input> = Mutex::new(Input::new());
+
+fn get_input() -> MutexGuard<'static, Input> {
+    INPUT.lock()
+}
+
+pub(crate) fn console_intr() {
+    match kbd::kbd_getc() {
+        None => {
+            // do nothing
+        }
+        Some(c) => {
+            let mut input = get_input();
+            {
+                let orig_e = input.e;
+                input.buf[orig_e as usize % INPUT_BUF] = c;
+                input.e = orig_e + 1;
+            }
+
+            {
+                let c = c as char;
+                print!("{}", c);
+                if c == '\n' || input.e == input.r + INPUT_BUF {
+                    input.w = input.e;
+                }
+            }
+        }
+    }
+}
+
+/// Return byte count read.
+/// The function does not block.
+pub(crate) fn console_read(_inode: &Inode, mut buf: *mut u8, n: usize) -> i32 {
+    let mut input = get_input();
+
+    if input.r == input.w {
+        return 0;
+    }
+
+    let mut count = 0;
+
+    while count < n && input.r != input.w {
+        let orig_r = input.r;
+        let c = input.buf[orig_r % INPUT_BUF];
+        unsafe {
+            *buf = c;
+            buf = buf.add(1);
+        }
+        count += 1;
+        input.r += 1;
+
+        if c as char == '\n' {
+            break;
+        }
+    }
+
+    count as i32
 }

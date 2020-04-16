@@ -79,7 +79,7 @@ pub(crate) fn kbd_getc() -> Option<u8> {
             }
         }
 
-        println!("kbd raw data: 0x{:02x}, as ascii: {}", data, c as char);
+        // println!("kbd raw data: 0x{:02x}, as ascii: {}", data, c as char);
         Some(c)
     }
 }

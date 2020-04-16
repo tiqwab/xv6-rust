@@ -12,6 +12,7 @@
 #![feature(core_intrinsics)]
 #![feature(option_result_contains)]
 #![feature(try_trait)]
+#![feature(fn_traits)]
 // FIXME: remove later
 #![allow(dead_code)]
 
@@ -22,6 +23,7 @@ pub mod console;
 mod allocator;
 mod buf;
 pub mod constants;
+mod device;
 mod elf;
 mod env;
 mod file;

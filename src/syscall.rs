@@ -22,6 +22,7 @@ mod consts {
     pub(crate) static SYS_CLOSE: u32 = 9;
     pub(crate) static SYS_READ: u32 = 10;
     pub(crate) static SYS_WRITE: u32 = 11;
+    pub(crate) static SYS_MKNOD: u32 = 12;
 }
 
 fn sys_cputs(s: &str) {
@@ -143,6 +144,14 @@ pub(crate) unsafe fn syscall(
                     })
             }
         }
+    } else if syscall_no == SYS_MKNOD {
+        let path = a1 as *const u8;
+        let major = a2 as u16;
+        let minor = a2 as u16;
+        sysfile::mknod(path, major, minor).unwrap_or_else(|err| {
+            println!("Error occurred: {}", sysfile::str_error(err));
+        });
+        0
     } else {
         panic!("unknown syscall");
     }
