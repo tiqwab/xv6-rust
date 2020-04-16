@@ -142,3 +142,8 @@ pub(crate) fn cli() {
 pub(crate) fn sti() {
     unsafe { asm!("sti" :::: "volatile") };
 }
+
+#[inline]
+pub(crate) fn pause() {
+    unsafe { asm!("pause" :::: "volatile") };
+}

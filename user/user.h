@@ -11,6 +11,11 @@
 #define O_RDWR   0x002
 #define O_CREAT  0x200
 
+// file descriptors
+#define STDIN_FILENO 0
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+
 typedef int size_t;
 typedef unsigned int uintptr_t;
 
@@ -25,6 +30,8 @@ int sys_open(char *path, int mode);
 int sys_close(int fd);
 int sys_read(int fd, char *buf, int count);
 int sys_write(int fd, char *buf, int count);
+int sys_mknod(char *path, short major, short minor);
+int sys_dup(int fd);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
@@ -34,5 +41,9 @@ void exit(int status);
 int vcprintf(const char *fmt, va_list ap);
 int printf(const char *fmt, ...);
 void vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list);
+int open(char *path, int mode);
+int close(int fd);
+int read(int fd, char *buf, int count);
+int write(int fd, char *buf, int count);
 
 #endif /* _XV6RUST_USER_USER_H */

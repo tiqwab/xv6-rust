@@ -9,6 +9,10 @@ USER_LIB_SRCS := \
 	user/lib/strnlen.c \
 	user/lib/syscall.c \
 	user/lib/exit.c \
+	user/lib/open.c \
+	user/lib/close.c \
+	user/lib/read.c \
+	user/lib/write.c \
 
 USER_LIB_OBJS := $(patsubst user/lib/%.c, $(OBJDIR)/user/lib/%.o, $(USER_LIB_SRCS))
 

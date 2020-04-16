@@ -91,3 +91,7 @@ pub(crate) const ROOT_DEV: u32 = 1; // device number of file system root disk
 pub(crate) const ROOT_INUM: u32 = 1; // inode of root
 pub(crate) const NFILE: usize = 100; // maximum open files per system
 pub(crate) const NFILE_PER_ENV: usize = 16; // maximum open files per process
+
+// device
+pub(crate) const NDEV: usize = 10; // maximum major device number
+pub(crate) const CONSOLE: usize = 1; // major number for console

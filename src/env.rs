@@ -6,7 +6,7 @@ use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType};
 use crate::pmap::{PageDirectory, PhysAddr, VirtAddr, PDX};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
-use crate::{fs, log, mpconfig, pmap, sched, util, x86};
+use crate::{file, fs, log, mpconfig, pmap, sched, util, x86};
 use core::fmt::{Error, Formatter};
 use core::{cmp, fmt, mem};
 
@@ -147,6 +147,22 @@ impl Env {
         self.env_ofile
             .get_mut(fd.0 as usize)
             .and_then(|ent_opt| ent_opt.as_mut())
+    }
+
+    pub(crate) fn fd_dup(&mut self, fd: FileDescriptor) -> Option<FileDescriptor> {
+        let ent_opt = self.fd_get(fd).map(|ent| ent.clone());
+
+        ent_opt.and_then(|ent| {
+            let mut res = None;
+            for (fd, ent_opt) in self.env_ofile.iter_mut().enumerate() {
+                if ent_opt.is_none() {
+                    *ent_opt = Some(ent.clone());
+                    res = Some(FileDescriptor(fd as u32));
+                    break;
+                }
+            }
+            res
+        })
     }
 }
 
@@ -365,6 +381,17 @@ impl EnvTable {
         // The allocation of pgdir is currently managed by rust,
         // so do nothing here
 
+        // Close all file descriptors
+        for ent_opt in env.env_ofile.iter_mut() {
+            let ent_opt = ent_opt.take();
+            match ent_opt {
+                None => (),
+                Some(ent) => {
+                    file::file_table().close(ent);
+                }
+            }
+        }
+
         // return the environment to the free list
         env.env_status = EnvStatus::Free;
 
@@ -398,7 +425,10 @@ impl EnvTable {
         // Clear %eax so that fork returns 0 in the child.
         new_env.env_tf.tf_regs.reg_eax = 0;
 
-        // TODO: Duplicate open file descriptors here.
+        // Dup env_ofile
+        for (i, ent_opt) in parent.env_ofile.iter().enumerate() {
+            new_env.env_ofile[i] = ent_opt.clone();
+        }
 
         new_env_id
     }

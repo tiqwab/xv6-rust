@@ -134,6 +134,7 @@ pub(crate) struct FileTable {
     files: [Option<Arc<RwLock<File>>>; NFILE],
 }
 
+#[derive(Clone)]
 pub(crate) struct FileTableEntry {
     pub(crate) file: Arc<RwLock<File>>,
     pub(crate) index: usize,

@@ -5,7 +5,7 @@ use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockUpgradeableGuard, RwLockWriteGuard};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::superblock::SuperBlock;
-use crate::{buf, env, file, log, superblock, util};
+use crate::{buf, device, env, file, log, superblock, util};
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::min;
@@ -439,7 +439,8 @@ pub(crate) fn iunlockput(ip: Arc<RwLock<Inode>>, inode: RwLockWriteGuard<'_, Ino
 /// Return byte count of read data.
 pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
     if inode.typ == InodeType::Dev {
-        panic!("readi: not yet implemented for DEV");
+        let sw = device::get_dev_sw(CONSOLE).unwrap();
+        return sw.read.call((inode, dst, n as usize)) as u32;
     }
 
     if off > inode.size || off + n < off {
@@ -480,7 +481,8 @@ pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u3
 /// Caller must hold ip->lock.
 pub(crate) fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32) -> u32 {
     if inode.typ == InodeType::Dev {
-        panic!("writei: not yet implemented for DEV");
+        let sw = device::get_dev_sw(CONSOLE).unwrap();
+        return sw.write.call((inode, src, n as usize)) as u32;
     }
 
     if off > inode.size || off + n < off {
