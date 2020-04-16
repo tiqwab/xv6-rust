@@ -33,11 +33,8 @@ void umain(int argc, char **argv) {
 
     // console
     {
-        sys_mknod("console", 1, 1);
-        int fd = open("console", O_RDWR);
-
-        int count = read(fd, buf, BUF_LEN);
+        int count = read(STDIN_FILENO, buf, BUF_LEN);
         buf[count++] = '\n';
-        write(fd, buf, count);
+        write(STDOUT_FILENO, buf, count);
     }
 }

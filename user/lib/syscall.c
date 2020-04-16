@@ -19,6 +19,7 @@
 #define SYS_READ 10
 #define SYS_WRITE 11
 #define SYS_MKNOD 12
+#define SYS_DUP 13
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -94,4 +95,8 @@ int sys_write(int fd, char *buf, int count) {
 
 int sys_mknod(char *path, short major, short minor) {
     return syscall(SYS_MKNOD, (int) path, (int) major, (int) minor, 0, 0);
+}
+
+int sys_dup(int fd) {
+    return syscall(SYS_DUP, fd, 0, 0, 0, 0);
 }

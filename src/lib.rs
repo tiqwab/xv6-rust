@@ -131,7 +131,7 @@ pub fn lib_main() {
 
         // env::env_create_for_spin(&mut env_table);
 
-        env::env_create_for_filetest(&mut env_table);
+        // env::env_create_for_filetest(&mut env_table);
 
         env::env_create_for_init(&mut env_table);
     }

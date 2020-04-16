@@ -2,6 +2,7 @@ use crate::constants::*;
 use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::{DirEnt, Inode, InodeType};
 use crate::rwlock::{RwLock, RwLockWriteGuard};
+use crate::sysfile::SysFileError::TooManyFileDescriptors;
 use crate::{env, file, fs, log, util};
 use alloc::sync::Arc;
 use consts::*;
@@ -20,6 +21,7 @@ pub(crate) enum SysFileError {
     IllegalFileName,
     TooManyFiles,
     TooManyFileDescriptors,
+    IllegalFileDescriptor,
 }
 
 pub(crate) fn str_error(err: SysFileError) -> &'static str {
@@ -27,6 +29,7 @@ pub(crate) fn str_error(err: SysFileError) -> &'static str {
         SysFileError::IllegalFileName => "illegal file name",
         SysFileError::TooManyFiles => "open too many files",
         SysFileError::TooManyFileDescriptors => "open too many file descriptors",
+        SysFileError::IllegalFileDescriptor => "illegal file descriptor",
     }
 }
 
@@ -320,6 +323,17 @@ pub(crate) fn mknod(path: *const u8, major: u16, minor: u16) -> Result<(), SysFi
     let res = create(path, InodeType::Dev, major, minor).map(|_| ());
     log::end_op();
     res
+}
+
+pub(crate) fn dup(fd: FileDescriptor) -> Result<FileDescriptor, SysFileError> {
+    let env = env::cur_env_mut().unwrap();
+    env.fd_get(fd)
+        .into_result()
+        .map_err(|_| SysFileError::IllegalFileDescriptor)?;
+    match env.fd_dup(fd) {
+        None => Err(TooManyFileDescriptors),
+        Some(fd) => Ok(fd),
+    }
 }
 
 pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
