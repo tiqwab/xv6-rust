@@ -5,7 +5,9 @@ use crate::file::FileDescriptor;
 use crate::pmap::VirtAddr;
 use crate::sched;
 use crate::{env, sysfile};
+use alloc::vec::Vec;
 use consts::*;
+use core::ptr::null;
 use core::slice;
 use core::str;
 
@@ -46,14 +48,7 @@ fn sys_fork() -> EnvId {
 }
 
 /// Dispatched to the correct kernel function, passing the arguments.
-pub(crate) unsafe fn syscall(
-    syscall_no: u32,
-    a1: u32,
-    a2: u32,
-    a3: u32,
-    _a4: u32,
-    _a5: u32,
-) -> i32 {
+pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32, a5: u32) -> i32 {
     if syscall_no == SYS_CPUTS {
         let raw_s = a1 as *const u8;
         let len = a2 as usize;
@@ -90,7 +85,19 @@ pub(crate) unsafe fn syscall(
         0
     } else if syscall_no == SYS_EXEC {
         let path = a1 as *const u8;
-        sysfile::exec(path).unwrap_or_else(|err| {
+        let arg_arr = [
+            a2 as *const u8,
+            a3 as *const u8,
+            a4 as *const u8,
+            a5 as *const u8,
+        ];
+        let mut arg_vec = Vec::new();
+        for v in arg_arr.iter() {
+            if *v != null() {
+                arg_vec.push(*v);
+            }
+        }
+        sysfile::exec(path, &arg_vec[..]).unwrap_or_else(|err| {
             println!("Error occurred: {}", sysfile::str_error(err));
         });
         0

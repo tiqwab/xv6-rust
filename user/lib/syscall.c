@@ -76,7 +76,7 @@ void sys_kill(int pid) {
 
 void sys_exec(char *pathname, char **orig_args, int argc) {
     if (argc > 4) {
-        printf("sys_exec: too many args");
+        printf("sys_exec: too many args\n");
         return;
     }
 

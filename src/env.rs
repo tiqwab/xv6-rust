@@ -486,6 +486,7 @@ use crate::file::{File, FileDescriptor, FileTableEntry};
 use crate::fs::Inode;
 use crate::rwlock::RwLock;
 use alloc::sync::Arc;
+use core::ops::Add;
 pub(crate) use temporary::*;
 
 mod temporary {
@@ -734,17 +735,7 @@ fn load_from_disk(mut dst: VirtAddr, inode: &mut Inode, mut off: u32, mut remain
     }
 }
 
-pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
-    // TODO: accept argv (and copy it same as path)
-
-    // copy path before replace pgdir
-    let path = [0 as u8; DIR_SIZ];
-    unsafe {
-        let dst = VirtAddr(&path as *const _ as *const u8 as u32);
-        let src = VirtAddr(orig_path as *const u8 as u32);
-        util::memcpy(dst, src, DIR_SIZ);
-    }
-
+pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
     // Allocate and set up the page directory for this environment.
     let new_pgdir = env_setup_vm();
     env.env_pgdir = new_pgdir;
@@ -754,7 +745,7 @@ pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
 
     log::begin_op();
 
-    let ip = fs::namei(path.as_ptr()).unwrap();
+    let ip = fs::namei(path).unwrap();
 
     let mut inode = fs::ilock(&ip);
 
@@ -820,10 +811,32 @@ pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
     let stack_size = PGSIZE as usize;
     env.env_pgdir.region_alloc(stack_base, stack_size);
 
+    // Prepare args
+    let mut sp: *mut u8 = stack_base.add(stack_size).as_mut_ptr();
+    unsafe {
+        let mut ustack = [0 as u32; 3 + MAX_CMD_ARGS]; // +3 is for return address, argv, and argc
+        for (i, s) in argv.iter().enumerate() {
+            let len = util::strnlen(*s, MAX_CMD_ARG_LEN);
+            sp = sp.sub(len + 1);
+            util::strncpy(sp, *s, len + 1);
+            ustack[3 + i] = sp as u32;
+        }
+        sp = sp.sub(mem::size_of_val(&ustack));
+        sp = VirtAddr(sp as u32).round_down(4).as_mut_ptr();
+        util::memcpy(
+            VirtAddr(sp as u32),
+            VirtAddr(&ustack as *const _ as u32),
+            mem::size_of_val(&ustack),
+        );
+        *sp.cast::<u32>() = argv.len() as u32; // argc
+        *sp.add(4).cast::<u32>() = sp.add(12) as u32; // argv
+    }
+
     // Set up appropriate initial values for the segment registers.
     // You will set e->env_tf.tf_eip later.
     let new_tf = Trapframe::new_for_user();
     env.env_tf = new_tf;
+    env.env_tf.tf_esp = sp as usize;
 
     // Set trapframe
     env.set_entry_point(elf.entry_point());
