@@ -25,7 +25,7 @@ void sys_yield(void);
 int sys_get_env_id(void);
 int sys_fork(void);
 void sys_kill(int pid);
-void sys_exec(char *path);
+void sys_exec(char *path, char **orig_args, int argc);
 int sys_open(char *path, int mode);
 int sys_close(int fd);
 int sys_read(int fd, char *buf, int count);
@@ -36,7 +36,9 @@ int sys_wait_env_id(int pid);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
+char *strchr(const char *s, char c);
 void exit(int status);
+void *memset(void *s, int c, size_t n);
 
 // stdio
 int vcprintf(const char *fmt, va_list ap);

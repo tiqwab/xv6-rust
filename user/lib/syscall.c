@@ -74,8 +74,23 @@ void sys_kill(int pid) {
     syscall(SYS_KILL, pid, 0, 0, 0, 0);
 }
 
-void sys_exec(char *pathname) {
-    syscall(SYS_EXEC, (int) pathname, 0, 0, 0, 0);
+void sys_exec(char *pathname, char **orig_args, int argc) {
+    if (argc > 4) {
+        printf("sys_exec: too many args");
+        return;
+    }
+
+    // the first elemnt of args is always pathname.
+    int args[5];
+    args[0] = (int) pathname;
+    for (int i = 0; i < 4; i++) {
+        if (i < argc) {
+            args[i + 1] = (int) orig_args[i];
+        } else {
+            args[i + 1] = 0;
+        }
+    }
+    syscall(SYS_EXEC, args[0], args[1], args[2], args[3], args[4]);
 }
 
 int sys_open(char *path, int mode) {

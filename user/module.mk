@@ -6,6 +6,7 @@ UPROGS += \
 	$(OBJDIR)/user/spin \
 	$(OBJDIR)/user/init \
 	$(OBJDIR)/user/filetest \
+	$(OBJDIR)/user/sh \
 
 include user/lib/module.mk
 
