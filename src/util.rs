@@ -58,3 +58,17 @@ pub(crate) fn strncmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
         0
     }
 }
+
+pub(crate) fn strncpy(mut dst: *mut u8, mut src: *const u8, n: usize) -> *mut u8 {
+    unsafe {
+        let ret = dst;
+        let mut cnt = 0;
+        while cnt < n && *src != 0 {
+            *dst = *src;
+            dst = dst.add(1);
+            src = src.add(1);
+            cnt += 1;
+        }
+        ret
+    }
+}

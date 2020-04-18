@@ -95,3 +95,5 @@ pub(crate) const NFILE_PER_ENV: usize = 16; // maximum open files per process
 // device
 pub(crate) const NDEV: usize = 10; // maximum major device number
 pub(crate) const CONSOLE: usize = 1; // major number for console
+pub(crate) const MAX_CMD_ARG_LEN: usize = 32; // maximum length of arguments
+pub(crate) const MAX_CMD_ARGS: usize = 10; // maximum number of arguments

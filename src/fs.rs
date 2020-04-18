@@ -321,11 +321,11 @@ pub(crate) fn ilock(ip: &Arc<RwLock<Inode>>) -> RwLockWriteGuard<'_, Inode> {
     // read data from disk
     let inode = &mut *lk;
 
-    println!(
-        "[ilock] inode {} is in block {}",
-        inode.inum,
-        block_for_inode(inode.inum, sb)
-    );
+    // println!(
+    //     "[ilock] inode {} is in block {}",
+    //     inode.inum,
+    //     block_for_inode(inode.inum, sb)
+    // );
 
     if !inode.valid {
         let mut bcache = buf::buf_cache();

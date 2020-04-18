@@ -12,10 +12,10 @@ void umain(int argc, char **argv) {
         return;
     } else if (child == 0) {
         // child
-        sys_exec("/filetest");
+        sys_exec("/sh", NULL, 0);
     } else {
         // parent
-        while (1) {
+        while (sys_wait_env_id(child) == 0) {
             __asm__ volatile("pause");
         }
     }

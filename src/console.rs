@@ -1,8 +1,8 @@
 use crate::fs::Inode;
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::{kbd, sched, serial, vga_buffer, x86};
-use core::fmt;
 use core::ptr::slice_from_raw_parts;
+use core::{cmp, fmt};
 
 static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -74,17 +74,25 @@ pub(crate) fn console_intr() {
         }
         Some(c) => {
             let mut input = get_input();
-            {
-                let orig_e = input.e;
-                input.buf[orig_e as usize % INPUT_BUF] = c;
-                input.e = orig_e + 1;
-            }
+            let orig_e = input.e;
 
             {
-                let c = c as char;
-                print!("{}", c);
-                if c == '\n' || input.e == input.r + INPUT_BUF {
+                if c == '\n' as u8 || input.e == input.r + INPUT_BUF {
+                    print!("{}", c as char);
+                    input.buf[orig_e as usize % INPUT_BUF] = c;
+                    input.e = orig_e + 1;
                     input.w = input.e;
+                } else if c == 0x08 {
+                    // backspace
+                    if input.e != input.w {
+                        input.e = orig_e - 1;
+                        serial::serial().put_bs();
+                        vga_buffer::writer().write_bs();
+                    }
+                } else {
+                    print!("{}", c as char);
+                    input.buf[orig_e as usize % INPUT_BUF] = c;
+                    input.e = orig_e + 1;
                 }
             }
         }

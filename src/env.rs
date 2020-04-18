@@ -36,6 +36,7 @@ enum EnvStatus {
     Dying,
     Runnable,
     Running,
+    Zombie,
     NotRunnable,
 }
 
@@ -76,6 +77,10 @@ impl Env {
 
     pub(crate) fn is_dying(&self) -> bool {
         self.env_status == EnvStatus::Dying
+    }
+
+    pub(crate) fn is_zombie(&self) -> bool {
+        self.env_status == EnvStatus::Zombie
     }
 
     fn pause(&mut self) {
@@ -342,7 +347,8 @@ impl EnvTable {
         env.set_entry_point(elf.entry_point());
     }
 
-    /// Frees env and all memory it uses.
+    /// Frees resources and memory the env uses except for the entry of env_table.
+    /// Use wait_env_id to release the entry.
     unsafe fn env_free(&mut self, env_id: EnvId) {
         let env = self.find_mut(env_id).expect("illegal env_id");
 
@@ -392,15 +398,28 @@ impl EnvTable {
             }
         }
 
-        // return the environment to the free list
-        env.env_status = EnvStatus::Free;
+        // Change the state to zombie.
+        // Call wait_env_id to release the entry later.
+        env.env_status = EnvStatus::Zombie;
+    }
 
-        for entry_opt in self.envs.iter_mut() {
-            match entry_opt {
-                Some(entry) if entry.env_id == env_id => {
-                    *entry_opt = None;
-                }
-                _ => (),
+    /// Release the entry of EnvTable.
+    /// Parent process uses this when it waits child process.
+    fn env_release(&mut self, env_id: EnvId) -> Option<EnvId> {
+        let child_opt = self.find(env_id).and_then(|child| {
+            if !child.is_zombie() {
+                None
+            } else {
+                Some(child)
+            }
+        });
+
+        match child_opt {
+            None => None,
+            Some(_) => {
+                let idx = self.get_idx(env_id).unwrap();
+                self.envs[idx] = None;
+                Some(env_id)
             }
         }
     }
@@ -467,6 +486,7 @@ use crate::file::{File, FileDescriptor, FileTableEntry};
 use crate::fs::Inode;
 use crate::rwlock::RwLock;
 use alloc::sync::Arc;
+use core::ops::Add;
 pub(crate) use temporary::*;
 
 mod temporary {
@@ -715,17 +735,7 @@ fn load_from_disk(mut dst: VirtAddr, inode: &mut Inode, mut off: u32, mut remain
     }
 }
 
-pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
-    // TODO: accept argv (and copy it same as path)
-
-    // copy path before replace pgdir
-    let path = [0 as u8; DIR_SIZ];
-    unsafe {
-        let dst = VirtAddr(&path as *const _ as *const u8 as u32);
-        let src = VirtAddr(orig_path as *const u8 as u32);
-        util::memcpy(dst, src, DIR_SIZ);
-    }
-
+pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
     // Allocate and set up the page directory for this environment.
     let new_pgdir = env_setup_vm();
     env.env_pgdir = new_pgdir;
@@ -735,7 +745,7 @@ pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
 
     log::begin_op();
 
-    let ip = fs::namei(path.as_ptr()).unwrap();
+    let ip = fs::namei(path).unwrap();
 
     let mut inode = fs::ilock(&ip);
 
@@ -801,13 +811,40 @@ pub(crate) fn exec(orig_path: *const u8, env: &mut Env) {
     let stack_size = PGSIZE as usize;
     env.env_pgdir.region_alloc(stack_base, stack_size);
 
+    // Prepare args
+    let mut sp: *mut u8 = stack_base.add(stack_size).as_mut_ptr();
+    unsafe {
+        let mut ustack = [0 as u32; 3 + MAX_CMD_ARGS]; // +3 is for return address, argv, and argc
+        for (i, s) in argv.iter().enumerate() {
+            let len = util::strnlen(*s, MAX_CMD_ARG_LEN);
+            sp = sp.sub(len + 1);
+            util::strncpy(sp, *s, len + 1);
+            ustack[3 + i] = sp as u32;
+        }
+        sp = sp.sub(mem::size_of_val(&ustack));
+        sp = VirtAddr(sp as u32).round_down(4).as_mut_ptr();
+        util::memcpy(
+            VirtAddr(sp as u32),
+            VirtAddr(&ustack as *const _ as u32),
+            mem::size_of_val(&ustack),
+        );
+        *sp.cast::<u32>() = argv.len() as u32; // argc
+        *sp.add(4).cast::<u32>() = sp.add(12) as u32; // argv
+    }
+
     // Set up appropriate initial values for the segment registers.
     // You will set e->env_tf.tf_eip later.
     let new_tf = Trapframe::new_for_user();
     env.env_tf = new_tf;
+    env.env_tf.tf_esp = sp as usize;
 
     // Set trapframe
     env.set_entry_point(elf.entry_point());
 
     // TODO: is there any other things to do here?
+}
+
+pub(crate) fn wait_env_id(env_id: EnvId) -> Option<EnvId> {
+    let mut env_table = env_table();
+    env_table.env_release(env_id)
 }

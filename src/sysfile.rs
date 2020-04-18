@@ -1,6 +1,7 @@
 use crate::constants::*;
 use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::{DirEnt, Inode, InodeType};
+use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockWriteGuard};
 use crate::sysfile::SysFileError::TooManyFileDescriptors;
 use crate::{env, file, fs, log, util};
@@ -365,8 +366,28 @@ pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
     Ok(())
 }
 
-pub(crate) fn exec(path: *const u8) -> Result<(), SysFileError> {
+pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), SysFileError> {
     let env = env::cur_env_mut().unwrap();
-    env::exec(path, env);
+
+    unsafe {
+        // copy path and argv because they are in user space.
+        let path = [0 as u8; DIR_SIZ];
+        let dst = VirtAddr(&path as *const _ as *const u8 as u32);
+        let src = VirtAddr(orig_path as *const u8 as u32);
+        util::memcpy(dst, src, DIR_SIZ);
+
+        let mut argv_stack = [[0 as u8; MAX_CMD_ARG_LEN]; MAX_CMD_ARGS];
+        for (i, s) in orig_argv.iter().enumerate() {
+            let len = util::strnlen(*s, MAX_CMD_ARG_LEN);
+            util::strncpy(argv_stack[i].as_mut_ptr(), *s, len + 1);
+        }
+
+        let mut argv = [null() as *const u8; MAX_CMD_ARGS];
+        for i in 0..orig_argv.len() {
+            argv[i] = argv_stack[i].as_ptr() as *const u8;
+        }
+
+        env::exec(path.as_ptr(), &argv[0..orig_argv.len()], env);
+    }
     Ok(())
 }
