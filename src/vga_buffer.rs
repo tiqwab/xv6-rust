@@ -1,26 +1,31 @@
+use crate::once::Once;
+use crate::spinlock::{Mutex, MutexGuard};
 use crate::volatile::Volatile;
 use core::fmt;
 use core::fmt::{Error, Write};
 
-// TODO: Make it to be thread-safe
-// ref. https://os.phil-opp.com/vga-text-mode/#spinlocks
-static mut WRITER: Option<Writer> = None;
+static WRITER: Once<Mutex<Writer>> = Once::new();
 
-pub fn init_writer(buf: &'static mut Buffer) {
-    unsafe {
-        WRITER = Some(Writer {
+pub(crate) fn init_writer(buf: &'static mut Buffer) {
+    WRITER.call_once(move || {
+        Mutex::new(Writer {
             column_position: 0,
             color_code: ColorCode::new(Color::Yellow, Color::Black),
             buffer: buf,
-        });
-    }
+        })
+    });
+}
+
+pub(crate) fn writer() -> MutexGuard<'static, Writer> {
+    WRITER
+        .try_get()
+        .expect("WRITER of vga should be initialized")
+        .lock()
 }
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    unsafe {
-        WRITER.as_mut().unwrap().write_fmt(args).unwrap();
-    }
+    writer().write_fmt(args).unwrap();
 }
 
 #[allow(dead_code)]
@@ -57,7 +62,7 @@ impl ColorCode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
-struct ScreenChar {
+pub(crate) struct ScreenChar {
     ascii_character: u8,
     color_code: ColorCode,
 }
@@ -77,9 +82,10 @@ pub struct Writer {
 }
 
 impl Writer {
-    pub fn write_byte(&mut self, byte: u8) {
+    fn write_byte(&mut self, byte: u8) {
         match byte {
             b'\n' => self.new_line(),
+            b'\x08' => self.bs(),
             byte => {
                 if self.column_position >= BUFFER_WIDTH {
                     self.column_position = 0;
@@ -98,10 +104,14 @@ impl Writer {
         }
     }
 
+    pub fn write_bs(&mut self) {
+        self.write_byte(b'\x08');
+    }
+
     pub fn write_string(&mut self, s: &str) {
         for byte in s.bytes() {
             match byte {
-                0x20..=0x7e | b'\n' => self.write_byte(byte as u8),
+                0x20..=0x7e | b'\n' | b'\x08' => self.write_byte(byte as u8),
                 _ => self.write_byte(0xfe),
             }
         }
@@ -116,6 +126,20 @@ impl Writer {
         }
         self.clear_row(BUFFER_HEIGHT - 1);
         self.column_position = 0;
+    }
+
+    fn bs(&mut self) {
+        // backspace
+        if self.column_position > 0 {
+            self.column_position -= 1;
+        }
+        let row = BUFFER_HEIGHT - 1;
+        let col = self.column_position;
+        let char = ScreenChar {
+            ascii_character: b' ',
+            color_code: self.color_code,
+        };
+        self.buffer.chars[row][col].write(char);
     }
 
     fn clear_row(&mut self, row: usize) {

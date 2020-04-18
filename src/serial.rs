@@ -1,52 +1,54 @@
 // ref. https://wiki.osdev.org/Serial_Ports
 // ref. console.c in xv6
 
+use crate::once::Once;
+use crate::spinlock::{Mutex, MutexGuard};
 use crate::x86;
 use core::fmt;
 use core::fmt::{Error, Write};
 
-// TODO: Make it to be thread-safe
-// ref. https://os.phil-opp.com/vga-text-mode/#spinlocks
-static mut SERIAL: Option<Serial> = None;
+static SERIAL: Once<Mutex<Serial>> = Once::new();
 
-struct Serial {
+pub(crate) struct Serial {
     #[allow(dead_code)]
     serial_exists: bool,
 }
 
-pub(crate) fn init_serial() {
-    // Turn off the FIFO
-    x86::outb(COM1 + COM_FCR, 0);
+pub(crate) fn serial() -> MutexGuard<'static, Serial> {
+    SERIAL
+        .call_once(|| {
+            // Turn off the FIFO
+            x86::outb(COM1 + COM_FCR, 0);
 
-    // Set speed; requires DLAB latch
-    x86::outb(COM1 + COM_LCR, COM_LCR_DLAB);
-    x86::outb(COM1 + COM_DLL, 12); // 115200 / 9600
-    x86::outb(COM1 + COM_DLM, 0);
+            // Set speed; requires DLAB latch
+            x86::outb(COM1 + COM_LCR, COM_LCR_DLAB);
+            x86::outb(COM1 + COM_DLL, 12); // 115200 / 9600
+            x86::outb(COM1 + COM_DLM, 0);
 
-    // 8 data bits, 1 stop bit, parity off; trun off DLAB latch
-    x86::outb(COM1 + COM_LCR, COM_LCR_WLEN8 & (!COM_LCR_DLAB));
+            // 8 data bits, 1 stop bit, parity off; trun off DLAB latch
+            x86::outb(COM1 + COM_LCR, COM_LCR_WLEN8 & (!COM_LCR_DLAB));
 
-    // No modem controls
-    x86::outb(COM1 + COM_MCR, 0);
+            // No modem controls
+            x86::outb(COM1 + COM_MCR, 0);
 
-    // Enable rcv interrupts
-    x86::outb(COM1 + COM_IER, COM_IER_RDI);
+            // Enable rcv interrupts
+            x86::outb(COM1 + COM_IER, COM_IER_RDI);
 
-    // Clear any preexisting overrun indications and interrupts
-    // Serial port doesn't exist if COM_LSR returns 0xFF
-    let serial_exists = x86::inb(COM1 + COM_LSR) != 0xFF;
-    x86::inb(COM1 + COM_IIR);
-    x86::inb(COM1 + COM_RX);
+            // Clear any preexisting overrun indications and interrupts
+            // Serial port doesn't exist if COM_LSR returns 0xFF
+            let serial_exists = x86::inb(COM1 + COM_LSR) != 0xFF;
+            x86::inb(COM1 + COM_IIR);
+            x86::inb(COM1 + COM_RX);
 
-    unsafe {
-        SERIAL = Some(Serial { serial_exists });
-    }
+            Mutex::new(Serial { serial_exists })
+        })
+        .lock()
 }
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     unsafe {
-        SERIAL.as_mut().unwrap().write_fmt(args).unwrap();
+        serial().write_fmt(args).unwrap();
     }
 }
 
@@ -102,7 +104,7 @@ impl Serial {
     }
 
     #[allow(dead_code)]
-    fn serial_proc_data(&self) -> Option<u8> {
+    fn proc_data(&self) -> Option<u8> {
         if (x86::inb(COM1 + COM_LSR) & COM_LSR_DATA) == 0 {
             None
         } else {
@@ -110,7 +112,7 @@ impl Serial {
         }
     }
 
-    fn serial_putc(&self, c: u8) {
+    fn putc(&self, c: u8) {
         for _ in 0..12800 {
             if (x86::inb(COM1 + COM_LSR) & COM_LSR_TXRDY) != 0 {
                 break;
@@ -119,12 +121,18 @@ impl Serial {
         }
         x86::outb(COM1 + COM_TX, c);
     }
+
+    pub(crate) fn put_bs(&self) {
+        self.putc(b'\x08');
+        self.putc(' ' as u8);
+        self.putc(b'\x08');
+    }
 }
 
 impl fmt::Write for Serial {
     fn write_str(&mut self, s: &str) -> Result<(), Error> {
         for b in s.bytes() {
-            self.serial_putc(b)
+            self.putc(b)
         }
         Ok(())
     }

@@ -80,8 +80,6 @@ pub fn lib_main() {
     let vga_buffer = unsafe { &mut *((0xb8000 + KERN_BASE) as *mut Buffer) };
     vga_buffer::init_writer(vga_buffer);
 
-    serial::init_serial();
-
     pmap::mem_init();
 
     unsafe { HeapAllocator::init(KHEAP_BASE as usize, KHEAP_SIZE) };
