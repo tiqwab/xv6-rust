@@ -33,12 +33,16 @@ int sys_write(int fd, char *buf, int count);
 int sys_mknod(char *path, short major, short minor);
 int sys_dup(int fd);
 int sys_wait_env_id(int pid);
+void *sys_sbrk(unsigned int nbytes);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
 char *strchr(const char *s, char c);
 void exit(int status);
 void *memset(void *s, int c, size_t n);
+void *sbrk(unsigned int nbytes);
+void *malloc(unsigned int nbytes);
+void free(void *ap);
 
 // stdio
 int vcprintf(const char *fmt, va_list ap);

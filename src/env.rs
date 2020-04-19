@@ -52,6 +52,7 @@ pub(crate) struct Env {
     env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
     env_cwd: Arc<RwLock<Inode>>,   // Current working directory
     env_ofile: [Option<FileTableEntry>; NFILE_PER_ENV], // Open files
+    env_heap_size: usize,          // allocated user heap size
 }
 
 impl PartialEq for Env {
@@ -278,6 +279,7 @@ impl EnvTable {
             env_pgdir: new_pgdir,
             env_cwd: cwd,
             env_ofile: [None; NFILE_PER_ENV],
+            env_heap_size: 0,
         };
 
         let env_opt = &mut self.envs[idx as usize];
@@ -337,7 +339,7 @@ impl EnvTable {
         // Now map one page for the program's initial stack
         // at virtual address USTACKTOP - PGSIZE.
         let stack_base = VirtAddr(USTACKTOP - PGSIZE);
-        let stack_size = PGSIZE as usize;
+        let stack_size = USTACKSIZE as usize;
         env.env_pgdir.region_alloc(stack_base, stack_size);
 
         // Restore kern page directory
@@ -692,8 +694,8 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
 
     // Now map one page for the program's initial stack
     // at virtual address USTACKTOP - PGSIZE.
-    let stack_base = VirtAddr(USTACKTOP - PGSIZE);
-    let stack_size = PGSIZE as usize;
+    let stack_base = VirtAddr(USTACKTOP - USTACKSIZE);
+    let stack_size = USTACKSIZE as usize;
     env.env_pgdir.region_alloc(stack_base, stack_size);
 
     // Prepare args
@@ -732,4 +734,27 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
 pub(crate) fn wait_env_id(env_id: EnvId) -> Option<EnvId> {
     let mut env_table = env_table();
     env_table.env_release(env_id)
+}
+
+/// Allocate user heap.
+/// Assume that the initial break is UHEAPBASE.
+pub(crate) fn sbrk(nbytes: usize) -> *const u8 {
+    let env = cur_env_mut().unwrap();
+    let pgdir = &mut env.env_pgdir;
+
+    // round up by PGSIZE
+    let required_size = {
+        let pgsize = PGSIZE as usize;
+        (nbytes + pgsize - 1) / pgsize * pgsize
+    };
+
+    if env.env_heap_size + required_size > UHEAPSIZE {
+        return null();
+    }
+
+    let cur_heap_top = VirtAddr(UHEAPBASE + (env.env_heap_size as u32));
+    pgdir.region_alloc(cur_heap_top, required_size);
+    env.env_heap_size += required_size;
+
+    cur_heap_top.as_ptr::<u8>()
 }
