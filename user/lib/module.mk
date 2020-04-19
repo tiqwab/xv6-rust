@@ -15,6 +15,8 @@ USER_LIB_SRCS := \
 	user/lib/write.c \
 	user/lib/memset.c \
 	user/lib/strchr.c \
+	user/lib/malloc.c \
+	user/lib/sbrk.c \
 
 USER_LIB_OBJS := $(patsubst user/lib/%.c, $(OBJDIR)/user/lib/%.o, $(USER_LIB_SRCS))
 

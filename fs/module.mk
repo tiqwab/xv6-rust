@@ -3,6 +3,7 @@ FS_IMG_FILES := \
 	$(OBJDIR)/user/filetest \
 	$(OBJDIR)/user/sh \
 	$(OBJDIR)/user/argstest \
+	$(OBJDIR)/user/malloctest \
 
 FS_CFLAGS := -Wall -Wextra -MD -I$(TOP)
 
@@ -15,7 +16,7 @@ $(FS_FORMAT): fs/fsformat.c
 	@mkdir -p $(@D)
 	$(V)$(CC) $(FS_CFLAGS) -o $@ $<
 
-$(FS_IMAGE): $(FS_FORMAT)
+$(FS_IMAGE): $(FS_FORMAT) $(FS_IMG_FILES)
 	@echo + mk $(FS_IMAGE)
 	$(V)mkdir -p $(@D)
 	$(V)$(FS_FORMAT) $(FS_IMAGE) $(FS_IMG_FILES)

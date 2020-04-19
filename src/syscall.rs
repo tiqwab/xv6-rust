@@ -27,6 +27,7 @@ mod consts {
     pub(crate) static SYS_MKNOD: u32 = 12;
     pub(crate) static SYS_DUP: u32 = 13;
     pub(crate) static SYS_WAIT_ENV_ID: u32 = 14;
+    pub(crate) static SYS_SBRK: u32 = 15;
 }
 
 fn sys_cputs(s: &str) {
@@ -174,6 +175,14 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         match env::wait_env_id(env_id) {
             None => 0,
             Some(id) => id.0 as i32,
+        }
+    } else if syscall_no == SYS_SBRK {
+        let nbytes = a1 as usize;
+        let p = env::sbrk(nbytes);
+        if p.is_null() {
+            -1
+        } else {
+            p as i32
         }
     } else {
         panic!("unknown syscall");

@@ -32,6 +32,10 @@ pub(crate) const KHEAP_SIZE: usize = 3 * PTSIZE;
 pub(crate) const UTOP: u32 = KHEAP_BASE;
 pub(crate) const UXSTACKTOP: u32 = UTOP;
 pub(crate) const USTACKTOP: u32 = UTOP - (2 * PGSIZE as u32);
+pub(crate) const USTACKSIZE: u32 = PGSIZE;
+
+pub(crate) const UHEAPBASE: u32 = USTACKTOP - USTACKSIZE - (UHEAPSIZE as u32);
+pub(crate) const UHEAPSIZE: usize = 3 * PTSIZE; // maximum heap size for user
 
 // Physical address of startup code for non-boot CPUs (APs)
 // #[no_mangle]
