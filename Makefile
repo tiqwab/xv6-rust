@@ -105,9 +105,14 @@ KERN_RUSTFLAGS := -Z print-link-args -C link-arg=-b -C link-arg=binary $(KERN_BI
 # '--compress-debug-sections' is temporary fix for 'contains a compressed section, but zlib is not available'
 KERN_CFLAGS := -Wa,--compress-debug-sections=none -Wl,--compress-debug-sections=none
 
+KERN_CARGOFLAGS :=
+ifdef DEBUG
+	KERN_CARGOFLAGS += --features debug
+endif
+
 kernel: $(UPROGS) $(KERNDIR)/vectors.S
 	@mkdir -p $(OBJDIR)
-	RUSTFLAGS="$(KERN_RUSTFLAGS)" CFLAGS="$(KERN_CFLAGS)" cargo xbuild --target i686-xv6rust.json --verbose
+	RUSTFLAGS="$(KERN_RUSTFLAGS)" CFLAGS="$(KERN_CFLAGS)" cargo xbuild --target i686-xv6rust.json --verbose $(KERN_CARGOFLAGS)
 	$(OBJDUMP) -S $(KERN_BINARY) > $(OBJDIR)/xv6-rust.asm
 	$(OBJDUMP) -S $(KERN_TEST_BINARY) > $(OBJDIR)/xv6-rust-test.asm
 

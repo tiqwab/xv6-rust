@@ -261,10 +261,12 @@ pub(crate) fn iget(dev: u32, inum: u32) -> Arc<RwLock<Inode>> {
 
     match icache.get(dev, inum) {
         Some(ip) => {
+            #[cfg(feature = "debug")]
             println!("[iget] found inum {}", inum);
             ip
         }
         None => {
+            #[cfg(feature = "debug")]
             println!("[iget] not found inum {}", inum);
             match icache.create(dev, inum) {
                 Some(ip) => ip,
@@ -450,6 +452,7 @@ pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u3
         n = inode.size - off;
     }
 
+    #[cfg(feature = "debug")]
     println!("[readi] inum: {}, off: {}, n: {}", inode.inum, off, n);
 
     let mut bcache = buf::buf_cache();
@@ -680,6 +683,7 @@ pub(crate) fn dir_lookup(
     let mut ent = DirEnt::empty();
     let mut off = 0;
 
+    #[cfg(feature = "debug")]
     println!(
         "[dir_lookup] dir.inum: {}, dir.size: {}",
         dir.inum, dir.size
@@ -691,7 +695,9 @@ pub(crate) fn dir_lookup(
             panic!("dir_lookup: failed to readi");
         }
 
+        #[cfg(feature = "debug")]
         print!("[dir_lookup] ent.inum: {}, ", ent.inum);
+        #[cfg(feature = "debug")]
         print_file_name("ent.name", ent.name.as_ptr());
 
         if ent.inum != 0 {

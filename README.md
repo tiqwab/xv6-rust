@@ -2,7 +2,10 @@
 ### run OS
 $ make qemu
 
-### debug OS
+### run OS with debug log
+$ make DEBUG=1 qemu
+
+### debug OS with GDB
 $ make qemu-gdb
 
 # in another console

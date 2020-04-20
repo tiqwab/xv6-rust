@@ -22,6 +22,7 @@ unsafe impl GlobalAlloc for HeapAllocator {
                 panic!("allocation error: {:?}", alloc_err);
             }
             Ok(res) => {
+                #[cfg(feature = "debug")]
                 println!(
                     "HeapAllocator: allocated for {:?} at 0x{:?}",
                     layout,
@@ -35,6 +36,7 @@ unsafe impl GlobalAlloc for HeapAllocator {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let heap = HEAP.as_mut().expect("HEAP is not initialized yet");
         heap.deallocate(NonNull::new_unchecked(ptr), layout);
+        #[cfg(feature = "debug")]
         println!("HeapAllocator: released {:?}", ptr);
     }
 }
