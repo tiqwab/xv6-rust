@@ -2,6 +2,7 @@
 
 use crate::env::EnvId;
 use crate::file::FileDescriptor;
+use crate::fs::Stat;
 use crate::pmap::VirtAddr;
 use crate::sched;
 use crate::{env, sysfile};
@@ -28,6 +29,7 @@ mod consts {
     pub(crate) static SYS_DUP: u32 = 13;
     pub(crate) static SYS_WAIT_ENV_ID: u32 = 14;
     pub(crate) static SYS_SBRK: u32 = 15;
+    pub(crate) static SYS_FSTAT: u32 = 16;
 }
 
 fn sys_cputs(s: &str) {
@@ -183,6 +185,19 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
             -1
         } else {
             p as i32
+        }
+    } else if syscall_no == SYS_FSTAT {
+        let fd = FileDescriptor(a1);
+        let statbuf = &mut *(a2 as *mut Stat);
+        match sysfile::stat(fd) {
+            Err(err) => {
+                println!("Error occurred: {}", sysfile::str_error(err));
+                -1
+            }
+            Ok(stat) => {
+                *statbuf = stat;
+                0
+            }
         }
     } else {
         panic!("unknown syscall");

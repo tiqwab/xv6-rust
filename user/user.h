@@ -2,6 +2,7 @@
 #define _XV6RUST_USER_USER_H
 
 #include "stdarg.h"
+#include "stat.h"
 
 #define NULL 0
 
@@ -34,15 +35,19 @@ int sys_mknod(char *path, short major, short minor);
 int sys_dup(int fd);
 int sys_wait_env_id(int pid);
 void *sys_sbrk(unsigned int nbytes);
+int sys_fstat(int fd, struct stat *statbuf);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
 char *strchr(const char *s, char c);
+char *strcpy(char *dest, const char *src);
 void exit(int status);
 void *memset(void *s, int c, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
 void *sbrk(unsigned int nbytes);
 void *malloc(unsigned int nbytes);
 void free(void *ap);
+int stat(char *path, struct stat *statbuf);
 
 // stdio
 int vcprintf(const char *fmt, va_list ap);

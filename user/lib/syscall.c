@@ -22,6 +22,7 @@
 #define SYS_DUP 13
 #define SYS_WAIT_ENV_ID 14
 #define SYS_SBRK 15
+#define SYS_FSTAT 16
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -124,4 +125,8 @@ int sys_wait_env_id(int pid) {
 
 void *sys_sbrk(unsigned int nbytes) {
     return (void *) syscall(SYS_SBRK, (int) nbytes, 0, 0, 0, 0);
+}
+
+int sys_fstat(int fd, struct stat *statbuf) {
+    return syscall(SYS_FSTAT, fd, (int) statbuf, 0, 0, 0);
 }

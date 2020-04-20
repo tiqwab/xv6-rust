@@ -527,13 +527,15 @@ pub(crate) fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32
     n
 }
 
+// FIXME: the same definition is in user/stat.h
 #[derive(Clone, Copy)]
+#[repr(C)]
 pub(crate) struct Stat {
-    typ: InodeType, // type of file
-    dev: u32,       // file system's disk device
-    inum: u32,      // inode number
-    nlink: u16,     // number of links to file
-    size: u32,      // size of file in bytes
+    pub(crate) typ: InodeType, // type of file
+    pub(crate) dev: u32,       // file system's disk device
+    pub(crate) inum: u32,      // inode number
+    pub(crate) nlink: u16,     // number of links to file
+    pub(crate) size: u32,      // size of file in bytes
 }
 
 pub(crate) fn stati(inode: &mut Inode) -> Stat {
@@ -614,6 +616,7 @@ fn bfree(dev: u32, blockno: u32) {
 // Dir
 // ---------------------------------------------------------------------------------
 
+// FIXME: the same definition is in user/stat.h
 #[repr(C)]
 pub(crate) struct DirEnt {
     inum: u32,
