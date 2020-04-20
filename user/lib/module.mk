@@ -7,6 +7,7 @@ USER_LIB_SRCS := \
 	user/lib/printfmt.c \
 	user/lib/strlen.c \
 	user/lib/strnlen.c \
+	user/lib/strcpy.c \
 	user/lib/syscall.c \
 	user/lib/exit.c \
 	user/lib/open.c \
@@ -14,9 +15,11 @@ USER_LIB_SRCS := \
 	user/lib/read.c \
 	user/lib/write.c \
 	user/lib/memset.c \
+	user/lib/memmove.c \
 	user/lib/strchr.c \
 	user/lib/malloc.c \
 	user/lib/sbrk.c \
+	user/lib/stat.c \
 
 USER_LIB_OBJS := $(patsubst user/lib/%.c, $(OBJDIR)/user/lib/%.o, $(USER_LIB_SRCS))
 

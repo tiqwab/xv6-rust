@@ -1,6 +1,6 @@
 use crate::constants::*;
 use crate::file::{FileDescriptor, FileTableEntry};
-use crate::fs::{DirEnt, Inode, InodeType};
+use crate::fs::{DirEnt, Inode, InodeType, Stat};
 use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockWriteGuard};
 use crate::sysfile::SysFileError::TooManyFileDescriptors;
@@ -324,6 +324,16 @@ pub(crate) fn mknod(path: *const u8, major: u16, minor: u16) -> Result<(), SysFi
     let res = create(path, InodeType::Dev, major, minor).map(|_| ());
     log::end_op();
     res
+}
+
+pub(crate) fn stat(fd: FileDescriptor) -> Result<Stat, SysFileError> {
+    match env::cur_env_mut().unwrap().fd_get(fd) {
+        None => Err(SysFileError::IllegalFileDescriptor),
+        Some(ent) => match ent.file.read().stat() {
+            None => Err(SysFileError::IllegalFileDescriptor),
+            Some(stat) => Ok(stat),
+        },
+    }
 }
 
 pub(crate) fn dup(fd: FileDescriptor) -> Result<FileDescriptor, SysFileError> {
