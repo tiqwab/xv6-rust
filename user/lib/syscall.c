@@ -24,6 +24,7 @@
 #define SYS_SBRK 15
 #define SYS_FSTAT 16
 #define SYS_GETCWD 17
+#define SYS_MKDIR 18
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -139,4 +140,8 @@ char *sys_getcwd(char *buf, unsigned int size) {
     } else {
         return buf;
     }
+}
+
+int sys_mkdir(char *path) {
+    return syscall(SYS_MKDIR, (int) path, 0, 0, 0, 0);
 }

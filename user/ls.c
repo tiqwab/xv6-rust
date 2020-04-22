@@ -20,7 +20,7 @@ char *fmtname(char *path) {
 void ls(char *path) {
     char buf[512], *p;
     int fd;
-    unsigned int sz;
+    unsigned int parent_sz, sz;
     struct dirent de;
     struct stat st;
 
@@ -34,6 +34,7 @@ void ls(char *path) {
         close(fd);
         return;
     }
+    parent_sz = st.size;
 
     switch (st.typ) {
         case T_FILE:
@@ -49,8 +50,9 @@ void ls(char *path) {
             *p++ = '/';
 
             sz = 0;
-            while (sz < st.size) {
+            while (sz < parent_sz) {
                 read(fd, (char *) &de, sizeof(de));
+                sz += sizeof(de);
                 if (de.inum == 0) {
                     continue;
                 }
@@ -61,7 +63,6 @@ void ls(char *path) {
                     continue;
                 }
                 printf("%s %d %d %d\n", fmtname(buf), st.typ, st.inum, st.size);
-                sz += sizeof(de);
             }
             break;
     }
