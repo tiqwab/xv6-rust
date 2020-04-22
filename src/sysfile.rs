@@ -7,9 +7,9 @@ use crate::sysfile::SysFileError::TooManyFileDescriptors;
 use crate::{env, file, fs, log, util};
 use alloc::sync::Arc;
 use consts::*;
-use core::mem;
 use core::ops::Try;
 use core::ptr::{null, null_mut, slice_from_raw_parts};
+use core::{cmp, mem};
 
 pub(crate) mod consts {
     pub(crate) const O_RDONLY: u32 = 0x000;
@@ -125,7 +125,7 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
     let mut off = 0;
 
     // get the target inode in the directory
-    let ip = fs::dir_lookup(&mut dir_inode, name.as_ptr(), &mut off)
+    let ip = fs::dir_lookup_with_name(&mut dir_inode, name.as_ptr(), &mut off)
         .into_result()
         .map_err(|_| SysFileError::IllegalFileName);
 
@@ -194,7 +194,7 @@ fn create(
 
     let mut dir_inode = fs::ilock(&dp);
 
-    let ip = fs::dir_lookup(&mut dir_inode, name.as_ptr(), null_mut());
+    let ip = fs::dir_lookup_with_name(&mut dir_inode, name.as_ptr(), null_mut());
     let ip = match ip {
         Some(p) => {
             fs::iunlock(dir_inode);
@@ -400,4 +400,47 @@ pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), 
         env::exec(path.as_ptr(), &argv[0..orig_argv.len()], env);
     }
     Ok(())
+}
+
+/// Return the length of name (exclusive '\0' at the end)
+pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysFileError> {
+    let env = env::cur_env().unwrap();
+    let mut cwd = env.get_cwd().write();
+    let cwd_inum = cwd.get_inum();
+
+    if cwd.get_dev() == ROOT_DEV && cwd.get_inum() == ROOT_INUM {
+        let name = [b'/', b'\0'];
+        let len = cmp::min(size - 1, 1);
+        util::strncpy(buf, name.as_ptr(), len);
+        unsafe { *buf.add(len) = b'\0' };
+        return Ok(len);
+    }
+
+    let path_parent = [b'.', b'.', b'\0'];
+    let parent = fs::dir_lookup_with_name(&mut cwd, path_parent.as_ptr(), null_mut())
+        .into_result()
+        .map_err(|_| SysFileError::IllegalFileName)?;
+    let mut parent = parent.write();
+
+    let mut off: u32 = 0;
+    fs::dir_lookup_with_inum(&mut parent, cwd_inum, &mut off);
+
+    let mut ent = DirEnt::empty();
+    let dir_ent_size = mem::size_of::<DirEnt>();
+    let cnt = fs::readi(
+        &mut parent,
+        &mut ent as *mut _ as *mut u8,
+        off,
+        dir_ent_size as u32,
+    );
+    if cnt != dir_ent_size as u32 {
+        Err(SysFileError::IllegalFileName)
+    } else {
+        let name = ent.get_name();
+        let name_len = util::strnlen(name, DIR_SIZ);
+        let len = cmp::min(size - 1, name_len);
+        util::strncpy(buf, &ent as *const _ as *const u8, len);
+        unsafe { *buf.add(len) = b'\0' };
+        Ok(len)
+    }
 }

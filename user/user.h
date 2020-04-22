@@ -36,6 +36,7 @@ int sys_dup(int fd);
 int sys_wait_env_id(int pid);
 void *sys_sbrk(unsigned int nbytes);
 int sys_fstat(int fd, struct stat *statbuf);
+char *sys_getcwd(char *buf, unsigned int usize);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);

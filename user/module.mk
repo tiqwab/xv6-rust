@@ -10,6 +10,7 @@ UPROGS += \
 	$(OBJDIR)/user/argstest \
 	$(OBJDIR)/user/malloctest \
 	$(OBJDIR)/user/ls \
+	$(OBJDIR)/user/pwd \
 
 include user/lib/module.mk
 

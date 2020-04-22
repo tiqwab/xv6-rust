@@ -5,6 +5,7 @@ FS_IMG_FILES := \
 	$(OBJDIR)/user/argstest \
 	$(OBJDIR)/user/malloctest \
 	$(OBJDIR)/user/ls \
+	$(OBJDIR)/user/pwd \
 
 FS_CFLAGS := -Wall -Wextra -MD -I$(TOP)
 

@@ -30,6 +30,7 @@ mod consts {
     pub(crate) static SYS_WAIT_ENV_ID: u32 = 14;
     pub(crate) static SYS_SBRK: u32 = 15;
     pub(crate) static SYS_FSTAT: u32 = 16;
+    pub(crate) static SYS_GETCWD: u32 = 17;
 }
 
 fn sys_cputs(s: &str) {
@@ -198,6 +199,16 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
                 *statbuf = stat;
                 0
             }
+        }
+    } else if syscall_no == SYS_GETCWD {
+        let buf = a1 as *mut u8;
+        let size = a2 as usize;
+        match sysfile::getcwd(buf, size) {
+            Err(err) => {
+                println!("Error occurred: {}", sysfile::str_error(err));
+                -1
+            }
+            Ok(len) => len as i32,
         }
     } else {
         panic!("unknown syscall");
