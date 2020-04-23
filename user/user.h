@@ -38,6 +38,7 @@ void *sys_sbrk(unsigned int nbytes);
 int sys_fstat(int fd, struct stat *statbuf);
 char *sys_getcwd(char *buf, unsigned int usize);
 int sys_mkdir(char *path);
+int sys_chdir(char *path);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);

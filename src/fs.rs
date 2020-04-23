@@ -726,6 +726,9 @@ pub(crate) fn dir_lookup_with_name(
     name: *const u8,
     p_off: *mut u32,
 ) -> Option<Arc<RwLock<Inode>>> {
+    #[cfg(feature = "debug")]
+    print_file_name("dir_lookup for name", name);
+
     let cond: Box<dyn Fn(&DirEnt) -> bool> =
         Box::new(move |ent| util::strncmp(name, ent.name.as_ptr(), DIR_SIZ) == 0);
     dir_lookup(dir, p_off, Box::new(cond))

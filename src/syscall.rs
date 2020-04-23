@@ -32,6 +32,7 @@ mod consts {
     pub(crate) static SYS_FSTAT: u32 = 16;
     pub(crate) static SYS_GETCWD: u32 = 17;
     pub(crate) static SYS_MKDIR: u32 = 18;
+    pub(crate) static SYS_CHDIR: u32 = 19;
 }
 
 fn sys_cputs(s: &str) {
@@ -214,6 +215,15 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
     } else if syscall_no == SYS_MKDIR {
         let path = a1 as *const u8;
         match sysfile::mkdir(path) {
+            Err(err) => {
+                println!("Error occurred: {}", sysfile::str_error(err));
+                -1
+            }
+            Ok(_) => 0,
+        }
+    } else if syscall_no == SYS_CHDIR {
+        let path = a1 as *const u8;
+        match sysfile::chdir(path) {
             Err(err) => {
                 println!("Error occurred: {}", sysfile::str_error(err));
                 -1

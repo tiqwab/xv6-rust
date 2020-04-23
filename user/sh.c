@@ -185,17 +185,25 @@ void umain(int argc, char **argv) {
 
     // Read and run input commands.
     while ((n = getcmd(buf, sizeof(buf))) >= 0) {
-        int child = sys_fork();
-        if (child < 0) {
-            printf("failed to fork\n");
-            break;
-        } else if (child == 0) {
-            // child
-            runcmd(parsecmd(buf));
+        if (buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' ') {
+            // Chdir must be called by the parent, not the child.
+            buf[strlen(buf) - 1] = 0; // chop \n
+            if (sys_chdir(buf + 3) != 0) {
+                printf("cd: cannot cd %s\n", buf + 3);
+            }
         } else {
-            // parent
-            while (sys_wait_env_id(child) == 0) {
-                __asm__ volatile("pause");
+            int child = sys_fork();
+            if (child < 0) {
+                printf("failed to fork\n");
+                break;
+            } else if (child == 0) {
+                // child
+                runcmd(parsecmd(buf));
+            } else {
+                // parent
+                while (sys_wait_env_id(child) == 0) {
+                    __asm__ volatile("pause");
+                }
             }
         }
     }
