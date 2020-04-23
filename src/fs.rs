@@ -739,6 +739,9 @@ pub(crate) fn dir_lookup_with_inum(
     inum: u32,
     p_off: *mut u32,
 ) -> Option<Arc<RwLock<Inode>>> {
+    #[cfg(feature = "debug")]
+    println!("dir_lookup for inum: {}", inum);
+
     let cond: Box<dyn Fn(&DirEnt) -> bool> = Box::new(move |ent| ent.inum == inum);
     dir_lookup(dir, p_off, Box::new(cond))
 }

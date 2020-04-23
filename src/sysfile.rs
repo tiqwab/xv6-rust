@@ -219,11 +219,12 @@ fn create(
         dir_inode.incr_nlink();
         fs::iupdate(&dir_inode);
         // no ip->nlink++ for "."; avoid cyclic ref count.
-        let inum = inode.get_inum();
+        let inum1 = inode.get_inum();
+        let inum2 = dir_inode.get_inum();
         let dot1 = ['.' as u8, 0];
         let dot2 = ['.' as u8, '.' as u8, 0];
-        if !fs::dir_link(&mut inode, dot1.as_ptr(), inum)
-            || !fs::dir_link(&mut inode, dot2.as_ptr(), inum)
+        if !fs::dir_link(&mut inode, dot1.as_ptr(), inum1)
+            || !fs::dir_link(&mut inode, dot2.as_ptr(), inum2)
         {
             panic!("create: failed to create dots");
         }
@@ -440,7 +441,7 @@ pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysFileError> {
         let name = ent.get_name();
         let name_len = util::strnlen(name, DIR_SIZ);
         let len = cmp::min(size - 1, name_len);
-        util::strncpy(buf, &ent as *const _ as *const u8, len);
+        util::strncpy(buf, name, len);
         unsafe { *buf.add(len) = b'\0' };
         Ok(len)
     }
