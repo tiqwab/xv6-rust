@@ -101,3 +101,23 @@ pub(crate) const NDEV: usize = 10; // maximum major device number
 pub(crate) const CONSOLE: usize = 1; // major number for console
 pub(crate) const MAX_CMD_ARG_LEN: usize = 32; // maximum length of arguments
 pub(crate) const MAX_CMD_ARGS: usize = 10; // maximum number of arguments
+
+// system call error
+// FIXME: duplicated in user/error.h
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SysError {
+    Unspecified = 1,
+    NoEnt,      // No such file or directory
+    IsDir,      // Is a directory
+    NotDir,     // Not a directory
+    InvalidArg, // Invalid argument
+    TooManyFiles,
+    TooManyFileDescriptors,
+    IllegalFileDescriptor,
+}
+
+impl SysError {
+    pub(crate) fn err_no(&self) -> i32 {
+        (*self as i32) * -1
+    }
+}

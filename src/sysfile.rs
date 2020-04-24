@@ -3,7 +3,6 @@ use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::{DirEnt, Inode, InodeType, Stat};
 use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockWriteGuard};
-use crate::sysfile::SysFileError::TooManyFileDescriptors;
 use crate::{env, file, fs, log, util};
 use alloc::sync::Arc;
 use consts::*;
@@ -18,29 +17,13 @@ pub(crate) mod consts {
     pub(crate) const O_CREATE: u32 = 0x200;
 }
 
-pub(crate) enum SysFileError {
-    IllegalFileName,
-    TooManyFiles,
-    TooManyFileDescriptors,
-    IllegalFileDescriptor,
-}
-
-pub(crate) fn str_error(err: SysFileError) -> &'static str {
-    match err {
-        SysFileError::IllegalFileName => "illegal file name",
-        SysFileError::TooManyFiles => "open too many files",
-        SysFileError::TooManyFileDescriptors => "open too many file descriptors",
-        SysFileError::IllegalFileDescriptor => "illegal file descriptor",
-    }
-}
-
 // Create the path new as a link to the same inode as old.
-pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
+pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysError> {
     log::begin_op();
 
     let ip = fs::namei(old).into_result().map_err(|_| {
         log::end_op();
-        SysFileError::IllegalFileName
+        SysError::NoEnt
     })?;
 
     let mut inode = fs::ilock(&ip);
@@ -50,7 +33,7 @@ pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
     if inode.is_dir() {
         fs::iunlock(inode);
         log::end_op();
-        return Err(SysFileError::IllegalFileName);
+        return Err(SysError::IsDir);
     }
 
     inode.incr_nlink();
@@ -69,7 +52,7 @@ pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
     let mut name = [0; DIR_SIZ];
     let res = fs::nameiparent(new, name.as_mut_ptr())
         .into_result()
-        .map_err(|_| SysFileError::IllegalFileName)
+        .map_err(|_| SysError::InvalidArg)
         .and_then(|dp| {
             let mut dir_inode = fs::ilock(&dp);
             if dir_inode.get_dev() == inode_dev
@@ -81,7 +64,7 @@ pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
             } else {
                 fs::iunlock(dir_inode);
                 fs::iput(dp);
-                Err(SysFileError::IllegalFileName)
+                Err(SysError::InvalidArg)
             }
         });
 
@@ -98,7 +81,7 @@ pub(crate) fn link(new: *const u8, old: *const u8) -> Result<(), SysFileError> {
     }
 }
 
-pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
+pub(crate) fn unlink(path: *const u8) -> Result<(), SysError> {
     log::begin_op();
 
     let mut name = [0; DIR_SIZ];
@@ -108,7 +91,7 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
         .into_result()
         .map_err(|_| {
             log::end_op();
-            SysFileError::IllegalFileName
+            SysError::InvalidArg
         })?;
 
     let mut dir_inode = fs::ilock(&dp);
@@ -119,7 +102,7 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
     {
         fs::iunlock(dir_inode);
         log::end_op();
-        return Err(SysFileError::IllegalFileName);
+        return Err(SysError::InvalidArg);
     }
 
     let mut off = 0;
@@ -127,7 +110,7 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
     // get the target inode in the directory
     let ip = fs::dir_lookup_with_name(&mut dir_inode, name.as_ptr(), &mut off)
         .into_result()
-        .map_err(|_| SysFileError::IllegalFileName);
+        .map_err(|_| SysError::NoEnt);
 
     let ip = match ip {
         Ok(inode) => inode,
@@ -149,7 +132,7 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
         fs::iunlock(dir_inode);
         fs::iput(dp);
         log::end_op();
-        return Err(SysFileError::IllegalFileName);
+        return Err(SysError::InvalidArg);
     }
 
     // Remove the inode from the dir
@@ -182,14 +165,14 @@ fn create(
     typ: InodeType,
     major: u16,
     minor: u16,
-) -> Result<Arc<RwLock<Inode>>, SysFileError> {
+) -> Result<Arc<RwLock<Inode>>, SysError> {
     let mut name = [0; DIR_SIZ];
 
     let dp = fs::nameiparent(path, name.as_mut_ptr())
         .into_result()
         .map_err(|_| {
             log::end_op();
-            SysFileError::IllegalFileName
+            SysError::InvalidArg
         })?;
 
     let mut dir_inode = fs::ilock(&dp);
@@ -205,7 +188,7 @@ fn create(
                 return Ok(p);
             } else {
                 fs::iunlock(inode);
-                return Err(SysFileError::IllegalFileName);
+                return Err(SysError::IsDir);
             }
         }
         None => fs::ialloc(dir_inode.get_dev(), typ, major, minor),
@@ -247,7 +230,7 @@ fn fd_alloc(ent: FileTableEntry) -> Result<FileDescriptor, FileTableEntry> {
     cur_env.fd_alloc(ent)
 }
 
-pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFileError> {
+pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysError> {
     log::begin_op();
 
     let ip = if mode & O_CREATE != 0 {
@@ -263,7 +246,7 @@ pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFile
             Some(ip) => Ok(ip),
             None => {
                 log::end_op();
-                Err(SysFileError::IllegalFileName)
+                Err(SysError::NoEnt)
             }
         }
     }?;
@@ -274,7 +257,7 @@ pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFile
         fs::iunlock(inode);
         fs::iput(ip);
         log::end_op();
-        return Err(SysFileError::IllegalFileName);
+        return Err(SysError::IsDir);
     }
 
     let mut ft = file::file_table();
@@ -286,7 +269,7 @@ pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFile
             fs::iunlock(inode);
             fs::iput(ip);
             log::end_op();
-            Err(SysFileError::TooManyFiles)
+            Err(SysError::TooManyFiles)
         }
         Some(ent) => {
             let fd_opt = fd_alloc(ent);
@@ -296,7 +279,7 @@ pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFile
                     fs::iunlock(inode);
                     fs::iput(ip);
                     log::end_op();
-                    Err(SysFileError::TooManyFileDescriptors)
+                    Err(SysError::TooManyFileDescriptors)
                 }
                 Ok(fd) => {
                     fs::iunlock(inode);
@@ -308,48 +291,48 @@ pub(crate) fn open(path: *const u8, mode: u32) -> Result<FileDescriptor, SysFile
     }
 }
 
-pub(crate) fn close(fd: FileDescriptor) -> Result<(), SysFileError> {
+pub(crate) fn close(fd: FileDescriptor) -> Result<(), SysError> {
     let ent = env::cur_env_mut().unwrap().fd_close(fd);
     file::file_table().close(ent);
     Ok(())
 }
 
-pub(crate) fn mkdir(path: *const u8) -> Result<(), SysFileError> {
+pub(crate) fn mkdir(path: *const u8) -> Result<(), SysError> {
     log::begin_op();
     let res = create(path, InodeType::Dir, 0, 0).map(|_| ());
     log::end_op();
     res
 }
 
-pub(crate) fn mknod(path: *const u8, major: u16, minor: u16) -> Result<(), SysFileError> {
+pub(crate) fn mknod(path: *const u8, major: u16, minor: u16) -> Result<(), SysError> {
     log::begin_op();
     let res = create(path, InodeType::Dev, major, minor).map(|_| ());
     log::end_op();
     res
 }
 
-pub(crate) fn stat(fd: FileDescriptor) -> Result<Stat, SysFileError> {
+pub(crate) fn stat(fd: FileDescriptor) -> Result<Stat, SysError> {
     match env::cur_env_mut().unwrap().fd_get(fd) {
-        None => Err(SysFileError::IllegalFileDescriptor),
+        None => Err(SysError::IllegalFileDescriptor),
         Some(ent) => match ent.file.read().stat() {
-            None => Err(SysFileError::IllegalFileDescriptor),
+            None => Err(SysError::IllegalFileDescriptor),
             Some(stat) => Ok(stat),
         },
     }
 }
 
-pub(crate) fn dup(fd: FileDescriptor) -> Result<FileDescriptor, SysFileError> {
+pub(crate) fn dup(fd: FileDescriptor) -> Result<FileDescriptor, SysError> {
     let env = env::cur_env_mut().unwrap();
     env.fd_get(fd)
         .into_result()
-        .map_err(|_| SysFileError::IllegalFileDescriptor)?;
+        .map_err(|_| SysError::IllegalFileDescriptor)?;
     match env.fd_dup(fd) {
-        None => Err(TooManyFileDescriptors),
+        None => Err(SysError::TooManyFileDescriptors),
         Some(fd) => Ok(fd),
     }
 }
 
-pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
+pub(crate) fn chdir(path: *const u8) -> Result<(), SysError> {
     let cur_env = env::cur_env_mut().unwrap();
 
     log::begin_op();
@@ -358,7 +341,7 @@ pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
         Some(ip) => ip,
         None => {
             log::end_op();
-            return Err(SysFileError::IllegalFileName);
+            return Err(SysError::NoEnt);
         }
     };
 
@@ -367,7 +350,7 @@ pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
     if !inode.is_dir() {
         fs::iunlock(inode);
         log::end_op();
-        return Err(SysFileError::IllegalFileName);
+        return Err(SysError::NotDir);
     }
 
     fs::iunlock(inode);
@@ -378,7 +361,7 @@ pub(crate) fn chdir(path: *const u8) -> Result<(), SysFileError> {
     Ok(())
 }
 
-pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), SysFileError> {
+pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), SysError> {
     let env = env::cur_env_mut().unwrap();
 
     unsafe {
@@ -405,14 +388,14 @@ pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), 
 }
 
 /// Return the length of name (exclusive '\0' at the end)
-pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysFileError> {
+pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysError> {
     // Call f recursively to create an absolute path for cwd
     fn f(
         cur: Arc<RwLock<Inode>>,
         mut len: usize,
         buf: *mut u8,
         buf_size: usize,
-    ) -> Result<usize, SysFileError> {
+    ) -> Result<usize, SysError> {
         let mut cur_ip = cur.write();
         let cur_inum = cur_ip.get_inum();
 
@@ -423,7 +406,7 @@ pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysFileError> {
         let path_parent = [b'.', b'.', b'\0'];
         let parent = fs::dir_lookup_with_name(&mut cur_ip, path_parent.as_ptr(), null_mut())
             .into_result()
-            .map_err(|_| SysFileError::IllegalFileName)?;
+            .map_err(|_| SysError::NoEnt)?;
 
         len = f(parent.clone(), len, buf, buf_size)?;
 
@@ -442,7 +425,7 @@ pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysFileError> {
         );
 
         if cnt != dir_ent_size as u32 {
-            Err(SysFileError::IllegalFileName)
+            Err(SysError::Unspecified)
         } else {
             // add '/'
             let slash = [b'/', b'\0'];
