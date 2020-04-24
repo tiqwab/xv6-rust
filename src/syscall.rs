@@ -1,5 +1,6 @@
 // This file comes from kern/syscall.c in jos. See COPYRIGHT for copyright information.
 
+use crate::constants::SysError;
 use crate::env::EnvId;
 use crate::file::FileDescriptor;
 use crate::fs::Stat;
@@ -33,6 +34,19 @@ mod consts {
     pub(crate) static SYS_GETCWD: u32 = 17;
     pub(crate) static SYS_MKDIR: u32 = 18;
     pub(crate) static SYS_CHDIR: u32 = 19;
+}
+
+pub(crate) fn str_error(err: SysError) -> &'static str {
+    match err {
+        SysError::Unspecified => "unexpected error",
+        SysError::NoEnt => "no such file or directory",
+        SysError::IsDir => "is a directory",
+        SysError::NotDir => "is not a directory",
+        SysError::InvalidArg => "invalid argument",
+        SysError::TooManyFiles => "open too many files",
+        SysError::TooManyFileDescriptors => "open too many file descriptors",
+        SysError::IllegalFileDescriptor => "illegal file descriptor",
+    }
 }
 
 fn sys_cputs(s: &str) {
@@ -103,41 +117,33 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
                 arg_vec.push(*v);
             }
         }
-        sysfile::exec(path, &arg_vec[..]).unwrap_or_else(|err| {
-            println!("Error occurred: {}", sysfile::str_error(err));
-        });
-        0
+        match sysfile::exec(path, &arg_vec[..]) {
+            Err(err) => err.err_no(),
+            Ok(_) => 0,
+        }
     } else if syscall_no == SYS_OPEN {
         let path = a1 as *const u8;
         let mode = a2 as u32;
-        let res = sysfile::open(path, mode)
+        sysfile::open(path, mode)
             .map(|fd| fd.0 as i32)
-            .unwrap_or_else(|err| {
-                println!("Error occurred: {}", sysfile::str_error(err));
-                -1
-            });
-        res
+            .unwrap_or_else(|err| err.err_no())
     } else if syscall_no == SYS_CLOSE {
         let fd = FileDescriptor(a1 as u32);
-        sysfile::close(fd).unwrap_or_else(|err| {
-            println!("Error occurred: {}", sysfile::str_error(err));
-        });
-        0
+        match sysfile::close(fd) {
+            Err(err) => err.err_no(),
+            Ok(_) => 0,
+        }
     } else if syscall_no == SYS_READ {
         let fd = FileDescriptor(a1 as u32);
         let buf = a2 as *mut u8;
         let count = a3 as usize;
         match env::cur_env_mut().unwrap().fd_get(fd) {
-            None => {
-                println!("Error occurred in read: fd {} not found", fd.0);
-                -1
-            }
+            None => SysError::IllegalFileDescriptor.err_no(),
             Some(ent) => {
                 let mut f = ent.file.write();
-                f.read(buf, count).map(|cnt| cnt as i32).unwrap_or_else(|| {
-                    println!("Error occurred in read: failed to read fd {}", fd.0);
-                    -1
-                })
+                f.read(buf, count)
+                    .map(|cnt| cnt as i32)
+                    .unwrap_or_else(|| SysError::Unspecified.err_no())
             }
         }
     } else if syscall_no == SYS_WRITE {
@@ -145,36 +151,27 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let buf = a2 as *mut u8;
         let count = a3 as usize;
         match env::cur_env_mut().unwrap().fd_get(fd) {
-            None => {
-                println!("Error occurred in read: fd {} not found", fd.0);
-                -1
-            }
+            None => SysError::IllegalFileDescriptor.err_no(),
             Some(ent) => {
                 let mut f = ent.file.write();
                 f.write(buf, count)
                     .map(|cnt| cnt as i32)
-                    .unwrap_or_else(|| {
-                        println!("Error occurred in write: failed to write fd {}", fd.0);
-                        -1
-                    })
+                    .unwrap_or_else(|| SysError::Unspecified.err_no())
             }
         }
     } else if syscall_no == SYS_MKNOD {
         let path = a1 as *const u8;
         let major = a2 as u16;
         let minor = a2 as u16;
-        sysfile::mknod(path, major, minor).unwrap_or_else(|err| {
-            println!("Error occurred: {}", sysfile::str_error(err));
-        });
-        0
+        match sysfile::mknod(path, major, minor) {
+            Err(err) => err.err_no(),
+            Ok(_) => 0,
+        }
     } else if syscall_no == SYS_DUP {
         let fd = FileDescriptor(a1 as u32);
         sysfile::dup(fd)
             .map(|fd| fd.0 as i32)
-            .unwrap_or_else(|err| {
-                println!("Error occurred: {}", sysfile::str_error(err));
-                -1
-            })
+            .unwrap_or_else(|err| err.err_no())
     } else if syscall_no == SYS_WAIT_ENV_ID {
         let env_id = EnvId(a1);
         match env::wait_env_id(env_id) {
@@ -185,7 +182,7 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let nbytes = a1 as usize;
         let p = env::sbrk(nbytes);
         if p.is_null() {
-            -1
+            SysError::Unspecified.err_no()
         } else {
             p as i32
         }
@@ -193,10 +190,7 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let fd = FileDescriptor(a1);
         let statbuf = &mut *(a2 as *mut Stat);
         match sysfile::stat(fd) {
-            Err(err) => {
-                println!("Error occurred: {}", sysfile::str_error(err));
-                -1
-            }
+            Err(err) => err.err_no(),
             Ok(stat) => {
                 *statbuf = stat;
                 0
@@ -206,28 +200,19 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let buf = a1 as *mut u8;
         let size = a2 as usize;
         match sysfile::getcwd(buf, size) {
-            Err(err) => {
-                println!("Error occurred: {}", sysfile::str_error(err));
-                -1
-            }
+            Err(err) => err.err_no(),
             Ok(len) => len as i32,
         }
     } else if syscall_no == SYS_MKDIR {
         let path = a1 as *const u8;
         match sysfile::mkdir(path) {
-            Err(err) => {
-                println!("Error occurred: {}", sysfile::str_error(err));
-                -1
-            }
+            Err(err) => err.err_no(),
             Ok(_) => 0,
         }
     } else if syscall_no == SYS_CHDIR {
         let path = a1 as *const u8;
         match sysfile::chdir(path) {
-            Err(err) => {
-                println!("Error occurred: {}", sysfile::str_error(err));
-                -1
-            }
+            Err(err) => err.err_no(),
             Ok(_) => 0,
         }
     } else {
