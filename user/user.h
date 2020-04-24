@@ -3,6 +3,7 @@
 
 #include "stdarg.h"
 #include "stat.h"
+#include "errno.h"
 
 #define NULL 0
 

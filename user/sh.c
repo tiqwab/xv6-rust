@@ -4,6 +4,7 @@
 #include "user.h"
 
 #define MAXARGS 10
+#define BUF_LEN 128
 
 // Parsed command representation
 #define EXEC  1
@@ -172,7 +173,7 @@ struct cmd *parseexec(char **ps, char *es) {
 }
 
 void umain(int argc, char **argv) {
-    static char buf[128];
+    static char buf[BUF_LEN];
     int fd, n;
 
     // Ensure that three file descriptors are open.
@@ -185,16 +186,44 @@ void umain(int argc, char **argv) {
 
     // Read and run input commands.
     while ((n = getcmd(buf, sizeof(buf))) >= 0) {
+        buf[strlen(buf) - 1] = 0; // chop \n
+
         if (buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' ') {
             // Chdir must be called by the parent, not the child.
-            buf[strlen(buf) - 1] = 0; // chop \n
             if (sys_chdir(buf + 3) != 0) {
                 printf("cd: cannot cd %s\n", buf + 3);
             }
         } else {
+            // check cmd existence
+            char cmd[BUF_LEN];
+            memmove(cmd, buf, BUF_LEN);
+            char *cmd_end = strchr(cmd, ' ');
+            if (cmd_end != NULL) {
+                *cmd_end = '\0';
+            }
+
+            if (cmd[0] != '/' && strchr(cmd, '/') == NULL) {
+                int fd;
+                if ((fd = open(cmd, O_RDONLY)) < 0) {
+                    // prepend '/' to path
+                    int len = strnlen(buf, BUF_LEN);
+                    if (len < BUF_LEN - 2) {
+                        for (int i = len + 1; i > 0; i--) {
+                            buf[i] = buf[i - 1];
+                        }
+                        buf[0] = '/';
+                    } else {
+                        printf("sh: command not found: %s\n", buf);
+                        break;
+                    }
+                } else {
+                    close(fd);
+                }
+            }
+
             int child = sys_fork();
             if (child < 0) {
-                printf("failed to fork\n");
+                printf("sh: fork failed\n");
                 break;
             } else if (child == 0) {
                 // child
