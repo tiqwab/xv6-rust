@@ -6,6 +6,7 @@ use crate::rwlock::{RwLock, RwLockUpgradeableGuard, RwLockWriteGuard};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::superblock::SuperBlock;
 use crate::{buf, device, env, file, log, superblock, util};
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::min;
@@ -651,6 +652,10 @@ impl DirEnt {
         }
     }
 
+    pub(crate) fn get_name(&self) -> *const u8 {
+        self.name.as_ptr()
+    }
+
     fn as_u8_ptr(&self) -> *const u8 {
         (self as *const DirEnt).cast::<u8>()
     }
@@ -670,10 +675,10 @@ fn print_file_name(label: &str, p: *const u8) {
     println!("{}: {}", label, sli);
 }
 
-pub(crate) fn dir_lookup(
+fn dir_lookup(
     dir: &mut Inode,
-    name: *const u8,
     p_off: *mut u32,
+    cond: Box<dyn Fn(&DirEnt) -> bool>,
 ) -> Option<Arc<RwLock<Inode>>> {
     if dir.typ != InodeType::Dir {
         panic!("dir_lookup: inode is not dir");
@@ -701,7 +706,7 @@ pub(crate) fn dir_lookup(
         print_file_name("ent.name", ent.name.as_ptr());
 
         if ent.inum != 0 {
-            if util::strncmp(name, ent.name.as_ptr(), DIR_SIZ) == 0 {
+            if cond(&ent) {
                 // entry matches path element
                 if !p_off.is_null() {
                     unsafe { *p_off = off };
@@ -716,11 +721,36 @@ pub(crate) fn dir_lookup(
     None
 }
 
+pub(crate) fn dir_lookup_with_name(
+    dir: &mut Inode,
+    name: *const u8,
+    p_off: *mut u32,
+) -> Option<Arc<RwLock<Inode>>> {
+    #[cfg(feature = "debug")]
+    print_file_name("dir_lookup for name", name);
+
+    let cond: Box<dyn Fn(&DirEnt) -> bool> =
+        Box::new(move |ent| util::strncmp(name, ent.name.as_ptr(), DIR_SIZ) == 0);
+    dir_lookup(dir, p_off, Box::new(cond))
+}
+
+pub(crate) fn dir_lookup_with_inum(
+    dir: &mut Inode,
+    inum: u32,
+    p_off: *mut u32,
+) -> Option<Arc<RwLock<Inode>>> {
+    #[cfg(feature = "debug")]
+    println!("dir_lookup for inum: {}", inum);
+
+    let cond: Box<dyn Fn(&DirEnt) -> bool> = Box::new(move |ent| ent.inum == inum);
+    dir_lookup(dir, p_off, Box::new(cond))
+}
+
 /// Write a new directory entry (name, inum) into the directory dp.
 /// Return true if successful. Return false if it already exists.
 pub(crate) fn dir_link(dir: &mut Inode, name: *const u8, inum: u32) -> bool {
     // check that name is not present
-    if dir_lookup(dir, name, null_mut()).is_some() {
+    if dir_lookup_with_name(dir, name, null_mut()).is_some() {
         return false;
     }
 
@@ -850,7 +880,7 @@ fn namex(mut path: *const u8, does_want_parent: bool, name: *mut u8) -> Option<A
                 return Some(ip);
             }
 
-            match dir_lookup(&mut inode, name, null_mut()) {
+            match dir_lookup_with_name(&mut inode, name, null_mut()) {
                 None => {
                     iunlock(inode);
                     iput(ip);

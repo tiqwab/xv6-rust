@@ -432,10 +432,8 @@ impl EnvTable {
     ///
     /// ref. fork() in proc.c (xv6)
     fn fork(&mut self, parent: &mut Env) -> EnvId {
-        let root_inode = fs::iget(ROOT_DEV, ROOT_INUM);
-
         // Allocate process.
-        let new_env_id = self.env_alloc(parent.env_id, EnvType::User, root_inode);
+        let new_env_id = self.env_alloc(parent.env_id, EnvType::User, parent.get_cwd().clone());
         let new_env = self.find_mut(new_env_id).unwrap();
 
         // Copy process state from parent.

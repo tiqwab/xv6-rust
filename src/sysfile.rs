@@ -7,9 +7,9 @@ use crate::sysfile::SysFileError::TooManyFileDescriptors;
 use crate::{env, file, fs, log, util};
 use alloc::sync::Arc;
 use consts::*;
-use core::mem;
 use core::ops::Try;
 use core::ptr::{null, null_mut, slice_from_raw_parts};
+use core::{cmp, mem};
 
 pub(crate) mod consts {
     pub(crate) const O_RDONLY: u32 = 0x000;
@@ -125,7 +125,7 @@ pub(crate) fn unlink(path: *const u8) -> Result<(), SysFileError> {
     let mut off = 0;
 
     // get the target inode in the directory
-    let ip = fs::dir_lookup(&mut dir_inode, name.as_ptr(), &mut off)
+    let ip = fs::dir_lookup_with_name(&mut dir_inode, name.as_ptr(), &mut off)
         .into_result()
         .map_err(|_| SysFileError::IllegalFileName);
 
@@ -194,7 +194,7 @@ fn create(
 
     let mut dir_inode = fs::ilock(&dp);
 
-    let ip = fs::dir_lookup(&mut dir_inode, name.as_ptr(), null_mut());
+    let ip = fs::dir_lookup_with_name(&mut dir_inode, name.as_ptr(), null_mut());
     let ip = match ip {
         Some(p) => {
             fs::iunlock(dir_inode);
@@ -219,11 +219,12 @@ fn create(
         dir_inode.incr_nlink();
         fs::iupdate(&dir_inode);
         // no ip->nlink++ for "."; avoid cyclic ref count.
-        let inum = inode.get_inum();
+        let inum1 = inode.get_inum();
+        let inum2 = dir_inode.get_inum();
         let dot1 = ['.' as u8, 0];
         let dot2 = ['.' as u8, '.' as u8, 0];
-        if !fs::dir_link(&mut inode, dot1.as_ptr(), inum)
-            || !fs::dir_link(&mut inode, dot2.as_ptr(), inum)
+        if !fs::dir_link(&mut inode, dot1.as_ptr(), inum1)
+            || !fs::dir_link(&mut inode, dot2.as_ptr(), inum2)
         {
             panic!("create: failed to create dots");
         }
@@ -234,6 +235,7 @@ fn create(
     }
 
     fs::iunlock(inode);
+
     Ok(ip)
 }
 
@@ -400,4 +402,75 @@ pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), 
         env::exec(path.as_ptr(), &argv[0..orig_argv.len()], env);
     }
     Ok(())
+}
+
+/// Return the length of name (exclusive '\0' at the end)
+pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysFileError> {
+    // Call f recursively to create an absolute path for cwd
+    fn f(
+        cur: Arc<RwLock<Inode>>,
+        mut len: usize,
+        buf: *mut u8,
+        buf_size: usize,
+    ) -> Result<usize, SysFileError> {
+        let mut cur_ip = cur.write();
+        let cur_inum = cur_ip.get_inum();
+
+        if cur_ip.get_dev() == ROOT_DEV && cur_ip.get_inum() == ROOT_INUM {
+            return Ok(len);
+        }
+
+        let path_parent = [b'.', b'.', b'\0'];
+        let parent = fs::dir_lookup_with_name(&mut cur_ip, path_parent.as_ptr(), null_mut())
+            .into_result()
+            .map_err(|_| SysFileError::IllegalFileName)?;
+
+        len = f(parent.clone(), len, buf, buf_size)?;
+
+        let mut parent_ip = parent.write();
+
+        let mut off: u32 = 0;
+        fs::dir_lookup_with_inum(&mut parent_ip, cur_inum, &mut off);
+
+        let mut ent = DirEnt::empty();
+        let dir_ent_size = mem::size_of::<DirEnt>();
+        let cnt = fs::readi(
+            &mut parent_ip,
+            &mut ent as *mut _ as *mut u8,
+            off,
+            dir_ent_size as u32,
+        );
+
+        if cnt != dir_ent_size as u32 {
+            Err(SysFileError::IllegalFileName)
+        } else {
+            // add '/'
+            let slash = [b'/', b'\0'];
+            len = append(slash.as_ptr(), len, buf, buf_size);
+            // add dir name
+            len = append(ent.get_name(), len, buf, buf_size);
+            Ok(len)
+        }
+    }
+
+    // Append name to the last of buf.
+    // Return new len.
+    fn append(name: *const u8, len: usize, buf: *mut u8, buf_size: usize) -> usize {
+        let name_len = util::strnlen(name, DIR_SIZ);
+        let added_len = cmp::max(0, cmp::min(buf_size - len - 1, name_len));
+        unsafe { util::strncpy(buf.add(len), name, added_len) };
+        len + added_len
+    }
+
+    let env = env::cur_env().unwrap();
+    let res = f(env.get_cwd().clone(), 0, buf, size);
+    res.map(|mut len| {
+        if len == 0 {
+            // this is root
+            let slash = [b'/', b'\0'];
+            len = append(slash.as_ptr(), len, buf, size);
+        }
+        unsafe { *buf.add(len) = 0 };
+        len
+    })
 }

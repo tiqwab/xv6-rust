@@ -257,7 +257,7 @@ pub(crate) struct PDX(VirtAddr);
 
 impl PDX {
     pub(crate) fn new(va: VirtAddr) -> PDX {
-        let aligned_va = va.round_down(PGSIZE as usize);
+        let aligned_va = va.round_down(1 << 22);
         PDX(aligned_va)
     }
 }

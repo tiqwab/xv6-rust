@@ -23,6 +23,9 @@
 #define SYS_WAIT_ENV_ID 14
 #define SYS_SBRK 15
 #define SYS_FSTAT 16
+#define SYS_GETCWD 17
+#define SYS_MKDIR 18
+#define SYS_CHDIR 19
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -129,4 +132,21 @@ void *sys_sbrk(unsigned int nbytes) {
 
 int sys_fstat(int fd, struct stat *statbuf) {
     return syscall(SYS_FSTAT, fd, (int) statbuf, 0, 0, 0);
+}
+
+char *sys_getcwd(char *buf, unsigned int size) {
+    int cnt = syscall(SYS_GETCWD, (int) buf, (int) size, 0, 0, 0);
+    if (cnt == -1) {
+        return NULL;
+    } else {
+        return buf;
+    }
+}
+
+int sys_mkdir(char *path) {
+    return syscall(SYS_MKDIR, (int) path, 0, 0, 0, 0);
+}
+
+int sys_chdir(char *path) {
+    return syscall(SYS_CHDIR, (int) path, 0, 0, 0, 0);
 }
