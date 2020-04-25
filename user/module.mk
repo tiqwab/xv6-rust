@@ -12,6 +12,7 @@ UPROGS += \
 	$(OBJDIR)/user/ls \
 	$(OBJDIR)/user/pwd \
 	$(OBJDIR)/user/mkdir \
+	$(OBJDIR)/user/echo \
 
 include user/lib/module.mk
 

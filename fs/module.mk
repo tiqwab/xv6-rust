@@ -7,6 +7,7 @@ FS_IMG_FILES := \
 	$(OBJDIR)/user/ls \
 	$(OBJDIR)/user/pwd \
 	$(OBJDIR)/user/mkdir \
+	$(OBJDIR)/user/echo \
 
 FS_CFLAGS := -Wall -Wextra -MD -I$(TOP)
 
