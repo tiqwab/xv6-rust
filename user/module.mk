@@ -13,6 +13,8 @@ UPROGS += \
 	$(OBJDIR)/user/pwd \
 	$(OBJDIR)/user/mkdir \
 	$(OBJDIR)/user/echo \
+	$(OBJDIR)/user/whello \
+	$(OBJDIR)/user/cat \
 
 include user/lib/module.mk
 

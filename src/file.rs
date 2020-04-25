@@ -4,6 +4,7 @@ use crate::rwlock::RwLock;
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::{fs, log};
 use alloc::sync::Arc;
+use core::ops::Try;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FileType {
@@ -58,9 +59,9 @@ impl File {
     }
 
     /// Read from file.
-    pub(crate) fn read(&mut self, addr: *mut u8, n: usize) -> Option<usize> {
+    pub(crate) fn read(&mut self, addr: *mut u8, n: usize) -> Result<usize, SysError> {
         if !self.readable {
-            return None;
+            return Err(SysError::IllegalFileDescriptor);
         }
 
         if self.typ == FileType::Pipe {
@@ -73,18 +74,24 @@ impl File {
 
         let ip = self.ip.as_ref().unwrap();
         let mut inode = fs::ilock(&ip);
-        let r = fs::readi(&mut inode, addr, self.off, n as u32);
-        if r > 0 {
-            self.off += r;
-        }
+        let cnt_opt = fs::readi(&mut inode, addr, self.off, n as u32);
+        let res = match cnt_opt {
+            None => Err(SysError::TryAgain),
+            Some(cnt) => {
+                if cnt > 0 {
+                    self.off += cnt;
+                }
+                Ok(cnt as usize)
+            }
+        };
         fs::iunlock(inode);
-        Some(r as usize)
+        res
     }
 
     /// Write to file.
-    pub(crate) fn write(&mut self, addr: *const u8, n: usize) -> Option<usize> {
+    pub(crate) fn write(&mut self, addr: *const u8, n: usize) -> Result<usize, SysError> {
         if !self.writable {
-            return None;
+            return Err(SysError::IllegalFileDescriptor);
         }
 
         if self.typ == FileType::Pipe {
@@ -126,7 +133,7 @@ impl File {
             i += r as usize;
         }
 
-        Some(n)
+        Ok(n)
     }
 }
 

@@ -101,11 +101,11 @@ pub(crate) fn console_intr() {
 
 /// Return byte count read.
 /// The function does not block.
-pub(crate) fn console_read(_inode: &Inode, mut buf: *mut u8, n: usize) -> i32 {
+pub(crate) fn console_read(_inode: &Inode, mut buf: *mut u8, n: usize) -> Option<i32> {
     let mut input = get_input();
 
     if input.r == input.w {
-        return 0;
+        return None;
     }
 
     let mut count = 0;
@@ -125,5 +125,5 @@ pub(crate) fn console_read(_inode: &Inode, mut buf: *mut u8, n: usize) -> i32 {
         }
     }
 
-    count as i32
+    Some(count as i32)
 }

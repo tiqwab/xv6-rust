@@ -424,7 +424,7 @@ pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysError> {
             dir_ent_size as u32,
         );
 
-        if cnt != dir_ent_size as u32 {
+        if cnt != Some(dir_ent_size as u32) {
             Err(SysError::Unspecified)
         } else {
             // add '/'

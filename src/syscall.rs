@@ -46,6 +46,7 @@ pub(crate) fn str_error(err: SysError) -> &'static str {
         SysError::TooManyFiles => "open too many files",
         SysError::TooManyFileDescriptors => "open too many file descriptors",
         SysError::IllegalFileDescriptor => "illegal file descriptor",
+        SysError::TryAgain => "try again",
     }
 }
 
@@ -141,9 +142,10 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
             None => SysError::IllegalFileDescriptor.err_no(),
             Some(ent) => {
                 let mut f = ent.file.write();
-                f.read(buf, count)
-                    .map(|cnt| cnt as i32)
-                    .unwrap_or_else(|| SysError::Unspecified.err_no())
+                match f.read(buf, count) {
+                    Err(err) => err.err_no(),
+                    Ok(cnt) => cnt as i32,
+                }
             }
         }
     } else if syscall_no == SYS_WRITE {
@@ -154,9 +156,10 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
             None => SysError::IllegalFileDescriptor.err_no(),
             Some(ent) => {
                 let mut f = ent.file.write();
-                f.write(buf, count)
-                    .map(|cnt| cnt as i32)
-                    .unwrap_or_else(|| SysError::Unspecified.err_no())
+                match f.write(buf, count) {
+                    Err(err) => err.err_no(),
+                    Ok(cnt) => cnt as i32,
+                }
             }
         }
     } else if syscall_no == SYS_MKNOD {

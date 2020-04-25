@@ -439,11 +439,12 @@ pub(crate) fn iunlockput(ip: Arc<RwLock<Inode>>, inode: RwLockWriteGuard<'_, Ino
 // ---------------------------------------------------------------------------------
 
 /// Read data from inode.
-/// Return byte count of read data.
-pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> u32 {
+/// Return byte count of read data or None if read is not completed yet (it is possible in reading with device).
+pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u32) -> Option<u32> {
     if inode.typ == InodeType::Dev {
         let sw = device::get_dev_sw(CONSOLE).unwrap();
-        return sw.read.call((inode, dst, n as usize)) as u32;
+        let res: Option<i32> = sw.read.call((inode, dst, n as usize));
+        return res.map(|cnt| cnt as u32);
     }
 
     if off > inode.size || off + n < off {
@@ -478,7 +479,7 @@ pub(crate) fn readi(inode: &mut Inode, mut dst: *mut u8, mut off: u32, mut n: u3
         dst = unsafe { dst.add(m as usize) };
     }
 
-    n
+    Some(n)
 }
 
 /// Write a data to inode.
@@ -696,7 +697,7 @@ fn dir_lookup(
 
     while off < dir.size {
         let ptr = ent.as_u8_mut_ptr();
-        if readi(dir, ptr, off, dir_ent_size) != dir_ent_size {
+        if readi(dir, ptr, off, dir_ent_size) != Some(dir_ent_size) {
             panic!("dir_lookup: failed to readi");
         }
 
@@ -761,7 +762,7 @@ pub(crate) fn dir_link(dir: &mut Inode, name: *const u8, inum: u32) -> bool {
 
     while off < dir.size {
         let ptr = ent.as_u8_mut_ptr();
-        if readi(dir, ptr, off, dir_ent_size) != dir_ent_size {
+        if readi(dir, ptr, off, dir_ent_size) != Some(dir_ent_size) {
             panic!("dir_link: failed to readi");
         }
         if ent.inum == 0 {
@@ -791,7 +792,7 @@ pub(crate) fn is_dir_empty(dp: &mut Inode) -> bool {
         let ent_p = &mut ent as *mut _ as *mut u8;
         let n = readi(dp, ent_p, off, dir_ent_size);
 
-        if n != dir_ent_size {
+        if n != Some(dir_ent_size) {
             panic!("is_dir_empty: failed to readi");
         }
         if ent.inum != 0 {

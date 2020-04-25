@@ -114,6 +114,7 @@ pub(crate) enum SysError {
     TooManyFiles,
     TooManyFileDescriptors,
     IllegalFileDescriptor,
+    TryAgain, // Try again
 }
 
 impl SysError {

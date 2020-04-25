@@ -5,12 +5,13 @@ use crate::once::Once;
 use alloc::boxed::Box;
 
 pub(crate) struct DevSw {
-    pub(crate) read: Box<dyn Fn(&Inode, *mut u8, usize) -> i32>,
+    /// Return None if device is not prepared for read.
+    pub(crate) read: Box<dyn Fn(&Inode, *mut u8, usize) -> Option<i32>>,
     pub(crate) write: Box<dyn Fn(&Inode, *const u8, usize) -> i32>,
 }
 
-fn do_nothing_read(_inode: &Inode, _buf: *mut u8, _count: usize) -> i32 {
-    0
+fn do_nothing_read(_inode: &Inode, _buf: *mut u8, _count: usize) -> Option<i32> {
+    Some(0)
 }
 
 fn do_nothing_write(_inode: &Inode, _buf: *const u8, _count: usize) -> i32 {

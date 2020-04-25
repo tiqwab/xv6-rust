@@ -611,7 +611,7 @@ pub(crate) fn fork(parent: &mut Env) -> EnvId {
 fn load_from_disk(mut dst: VirtAddr, inode: &mut Inode, mut off: u32, mut remain_sz: u32) {
     while remain_sz > 0 {
         let sz = cmp::min(PGSIZE, remain_sz);
-        if fs::readi(inode, dst.as_mut_ptr(), off, sz) != sz {
+        if fs::readi(inode, dst.as_mut_ptr(), off, sz) != Some(sz) {
             panic!("load_from_disk: failed to readi");
         }
         dst += sz;
@@ -642,7 +642,7 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
         buf_elf.as_mut_ptr(),
         0,
         mem::size_of::<Elf>() as u32,
-    ) != mem::size_of::<Elf>() as u32
+    ) != Some(mem::size_of::<Elf>() as u32)
     {
         panic!("exec: failed to read elf header")
     }
@@ -662,7 +662,7 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
                 buf_ph.as_mut_ptr(),
                 off,
                 mem::size_of::<Proghdr>() as u32,
-            ) != mem::size_of::<Proghdr>() as u32
+            ) != Some(mem::size_of::<Proghdr>() as u32)
             {
                 panic!("exec: failed to read program header");
             }
