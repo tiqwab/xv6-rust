@@ -70,6 +70,11 @@ pub(crate) fn kbd_getc() -> Option<u8> {
 
         let mut c = char_code[(shift & (SHIFT_FL_CTL | SHIFT_FL_SHIFT)) as usize][data as usize];
 
+        if c == 0 {
+            // there is no corresponding ascii code such as shift
+            return None;
+        }
+
         if shift & SHIFT_FL_CAPSLOCK != 0 {
             let _c = c as char;
             if 'a' <= _c && _c <= 'z' {
