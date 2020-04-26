@@ -39,6 +39,7 @@ mod mp;
 mod mpconfig;
 mod once;
 mod picirq;
+mod pipe;
 mod pmap;
 mod rwlock;
 mod sched;

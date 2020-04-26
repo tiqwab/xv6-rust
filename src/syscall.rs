@@ -34,6 +34,7 @@ mod consts {
     pub(crate) static SYS_GETCWD: u32 = 17;
     pub(crate) static SYS_MKDIR: u32 = 18;
     pub(crate) static SYS_CHDIR: u32 = 19;
+    pub(crate) static SYS_PIPE: u32 = 20;
 }
 
 pub(crate) fn str_error(err: SysError) -> &'static str {
@@ -217,6 +218,16 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         match sysfile::chdir(path) {
             Err(err) => err.err_no(),
             Ok(_) => 0,
+        }
+    } else if syscall_no == SYS_PIPE {
+        let fds = unsafe { &mut *(a1 as *mut [FileDescriptor; 2]) };
+        match sysfile::pipe() {
+            Err(err) => err.err_no(),
+            Ok((fd0, fd1)) => {
+                fds[0] = fd0;
+                fds[1] = fd1;
+                0
+            }
         }
     } else {
         panic!("unknown syscall");

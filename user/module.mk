@@ -15,6 +15,7 @@ UPROGS += \
 	$(OBJDIR)/user/echo \
 	$(OBJDIR)/user/whello \
 	$(OBJDIR)/user/cat \
+	$(OBJDIR)/user/pipetest \
 
 include user/lib/module.mk
 
