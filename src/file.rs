@@ -14,6 +14,7 @@ enum FileType {
     Inode,
 }
 
+// FIXME: File should be enum consisting of Pipe and Inode
 pub(crate) struct File {
     typ: FileType,
     readable: bool,
@@ -64,28 +65,28 @@ impl File {
             return Err(SysError::IllegalFileDescriptor);
         }
 
-        if self.typ == FileType::Pipe {
-            unimplemented!()
-        }
-
-        if self.typ != FileType::Inode {
-            panic!("File::read: unexpected type");
-        }
-
-        let ip = self.ip.as_ref().unwrap();
-        let mut inode = fs::ilock(&ip);
-        let cnt_opt = fs::readi(&mut inode, addr, self.off, n as u32);
-        let res = match cnt_opt {
-            None => Err(SysError::TryAgain),
-            Some(cnt) => {
-                if cnt > 0 {
-                    self.off += cnt;
-                }
-                Ok(cnt as usize)
+        match self.typ {
+            FileType::Pipe => {
+                let mut p = self.pipe.as_mut().expect("pipe should exist").write();
+                p.read(addr, n)
             }
-        };
-        fs::iunlock(inode);
-        res
+            FileType::Inode => {
+                let ip = self.ip.as_ref().unwrap();
+                let mut inode = fs::ilock(&ip);
+                let cnt_opt = fs::readi(&mut inode, addr, self.off, n as u32);
+                let res = match cnt_opt {
+                    None => Err(SysError::TryAgain),
+                    Some(cnt) => {
+                        if cnt > 0 {
+                            self.off += cnt;
+                        }
+                        Ok(cnt as usize)
+                    }
+                };
+                fs::iunlock(inode);
+                res
+            }
+        }
     }
 
     /// Write to file.
@@ -94,46 +95,46 @@ impl File {
             return Err(SysError::IllegalFileDescriptor);
         }
 
-        if self.typ == FileType::Pipe {
-            unimplemented!()
-        }
-
-        if self.typ != FileType::Inode {
-            panic!("File::write: unexpected type");
-        }
-
-        // write a few blocks at a time to avoid exceeding
-        // the maximum log transaction size, including
-        // i-node, indirect block, allocation blocks,
-        // and 2 blocks of slop for non-aligned writes.
-        // this really belongs lower down, since writei()
-        // might be writing a device like the console.
-        let max = ((MAX_OP_BLOCKS - 1 - 1 - 2) / 2) * 512;
-        let mut i = 0;
-        while i < n {
-            let mut n1 = n - i;
-            if n1 > max {
-                n1 = max;
+        match self.typ {
+            FileType::Pipe => {
+                let mut p = self.pipe.as_mut().expect("pipe should exist").write();
+                p.write(addr, n)
             }
+            FileType::Inode => {
+                // write a few blocks at a time to avoid exceeding
+                // the maximum log transaction size, including
+                // i-node, indirect block, allocation blocks,
+                // and 2 blocks of slop for non-aligned writes.
+                // this really belongs lower down, since writei()
+                // might be writing a device like the console.
+                let max = ((MAX_OP_BLOCKS - 1 - 1 - 2) / 2) * 512;
+                let mut i = 0;
+                while i < n {
+                    let mut n1 = n - i;
+                    if n1 > max {
+                        n1 = max;
+                    }
 
-            log::begin_op();
-            let ip = self.ip.as_ref().unwrap();
-            let mut inode = fs::ilock(&ip);
-            let r = fs::writei(&mut inode, addr, self.off, n as u32);
-            if r > 0 {
-                self.off += r;
+                    log::begin_op();
+                    let ip = self.ip.as_ref().unwrap();
+                    let mut inode = fs::ilock(&ip);
+                    let r = fs::writei(&mut inode, addr, self.off, n as u32);
+                    if r > 0 {
+                        self.off += r;
+                    }
+                    fs::iunlock(inode);
+                    log::end_op();
+
+                    if r != n1 as u32 {
+                        panic!("File::write: short file write");
+                    }
+
+                    i += r as usize;
+                }
+
+                Ok(n)
             }
-            fs::iunlock(inode);
-            log::end_op();
-
-            if r != n1 as u32 {
-                panic!("File::write: short file write");
-            }
-
-            i += r as usize;
         }
-
-        Ok(n)
     }
 }
 

@@ -48,6 +48,7 @@ pub(crate) fn str_error(err: SysError) -> &'static str {
         SysError::TooManyFileDescriptors => "open too many file descriptors",
         SysError::IllegalFileDescriptor => "illegal file descriptor",
         SysError::TryAgain => "try again",
+        SysError::BrokenPipe => "broken pipe",
     }
 }
 
