@@ -21,6 +21,7 @@
 typedef int size_t;
 typedef unsigned int uintptr_t;
 
+// should use printf instead
 void sys_cputs(const char *s, int len);
 void sys_exit(int status);
 void sys_yield(void);

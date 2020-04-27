@@ -70,21 +70,28 @@ fn sys_fork() -> EnvId {
     env::fork(cur_env)
 }
 
+fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> i32 {
+    match env::cur_env_mut().unwrap().fd_get(fd) {
+        None => SysError::IllegalFileDescriptor.err_no(),
+        Some(ent) => {
+            let mut f = ent.file.write();
+            match f.write(buf, len) {
+                Err(err) => err.err_no(),
+                Ok(cnt) => cnt as i32,
+            }
+        }
+    }
+}
+
 /// Dispatched to the correct kernel function, passing the arguments.
 pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32, a5: u32) -> i32 {
     if syscall_no == SYS_CPUTS {
+        // SYS_CPUTS is deprecated, use SYS_WRITE instead.
         let raw_s = a1 as *const u8;
         let len = a2 as usize;
         let curenv = env::cur_env_mut().expect("curenv should be exist");
-
         env::user_mem_assert(curenv, VirtAddr(raw_s as u32), len, 0);
-
-        let s = {
-            let utf8s = slice::from_raw_parts(raw_s, len);
-            str::from_utf8(utf8s).expect("illegal utf8 string")
-        };
-        sys_cputs(s);
-        0
+        sys_write(FileDescriptor(1), raw_s, len)
     } else if syscall_no == SYS_EXIT {
         let _status = a1 as i32;
         let curenv = env::cur_env_mut().expect("curenv should be exist");
@@ -154,16 +161,7 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let fd = FileDescriptor(a1 as u32);
         let buf = a2 as *mut u8;
         let count = a3 as usize;
-        match env::cur_env_mut().unwrap().fd_get(fd) {
-            None => SysError::IllegalFileDescriptor.err_no(),
-            Some(ent) => {
-                let mut f = ent.file.write();
-                match f.write(buf, count) {
-                    Err(err) => err.err_no(),
-                    Ok(cnt) => cnt as i32,
-                }
-            }
-        }
+        sys_write(fd, buf, count)
     } else if syscall_no == SYS_MKNOD {
         let path = a1 as *const u8;
         let major = a2 as u16;
@@ -221,7 +219,7 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
             Ok(_) => 0,
         }
     } else if syscall_no == SYS_PIPE {
-        let fds = unsafe { &mut *(a1 as *mut [FileDescriptor; 2]) };
+        let fds = &mut *(a1 as *mut [FileDescriptor; 2]);
         match sysfile::pipe() {
             Err(err) => err.err_no(),
             Ok((fd0, fd1)) => {
