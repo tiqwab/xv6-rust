@@ -8,4 +8,5 @@ enum errno {
     E_TOO_MANY_FILE_DESCRIPTORS,
     E_ILLEGAL_FILE_DESCRIPTOR,
     E_TRY_AGAIN,
+    E_NOT_CHILD,
 };

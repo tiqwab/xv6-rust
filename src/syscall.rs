@@ -49,6 +49,7 @@ pub(crate) fn str_error(err: SysError) -> &'static str {
         SysError::IllegalFileDescriptor => "illegal file descriptor",
         SysError::TryAgain => "try again",
         SysError::BrokenPipe => "broken pipe",
+        SysError::NotChild => "not child process",
     }
 }
 
@@ -178,8 +179,8 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
     } else if syscall_no == SYS_WAIT_ENV_ID {
         let env_id = EnvId(a1);
         match env::wait_env_id(env_id) {
-            None => 0,
-            Some(id) => id.0 as i32,
+            Err(err) => err.err_no(),
+            Ok(id) => id.0 as i32,
         }
     } else if syscall_no == SYS_SBRK {
         let nbytes = a1 as usize;

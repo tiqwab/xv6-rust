@@ -15,8 +15,6 @@ void umain(int argc, char **argv) {
         sys_exec("/sh", NULL, 0);
     } else {
         // parent
-        while (sys_wait_env_id(child) == 0) {
-            __asm__ volatile("pause");
-        }
+        wait_env_id(child);
     }
 }

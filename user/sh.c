@@ -106,8 +106,8 @@ void runcmd(struct cmd *cmd) {
 
             close(p[0]);
             close(p[1]);
-            sys_wait_env_id(left_id);
-            sys_wait_env_id(right_id);
+            wait_env_id(left_id);
+            wait_env_id(right_id);
             break;
     }
 
@@ -364,9 +364,7 @@ void umain(int argc, char **argv) {
                 runcmd(parsecmd(buf));
             } else {
                 // parent
-                while (sys_wait_env_id(child) == 0) {
-                    __asm__ volatile("pause");
-                }
+                wait_env_id(child);
             }
         }
     }

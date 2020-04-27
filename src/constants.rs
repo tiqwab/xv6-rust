@@ -116,6 +116,7 @@ pub(crate) enum SysError {
     IllegalFileDescriptor,
     TryAgain,   // Try again
     BrokenPipe, // Broken pipe
+    NotChild,   // Not child process
 }
 
 impl SysError {

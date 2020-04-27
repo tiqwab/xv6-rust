@@ -63,5 +63,6 @@ int open(char *path, int mode);
 int close(int fd);
 int read(int fd, char *buf, int count);
 int write(int fd, char *buf, int count);
+void wait_env_id(int pid);
 
 #endif /* _XV6RUST_USER_USER_H */

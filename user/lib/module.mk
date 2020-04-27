@@ -20,6 +20,7 @@ USER_LIB_SRCS := \
 	user/lib/malloc.c \
 	user/lib/sbrk.c \
 	user/lib/stat.c \
+	user/lib/wait_env_id.c \
 
 USER_LIB_OBJS := $(patsubst user/lib/%.c, $(OBJDIR)/user/lib/%.o, $(USER_LIB_SRCS))
 

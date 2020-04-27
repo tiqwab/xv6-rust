@@ -34,9 +34,7 @@ void umain(int argc, char **argv) {
             printf("received: %s\n", buf);
         }
 
-        if (sys_wait_env_id(env_id) == 0) {
-            __asm__ volatile ("pause");
-        }
+        wait_env_id(env_id);
 
         close(fds[0]);
     }
