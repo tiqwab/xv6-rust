@@ -17,7 +17,7 @@ const char *whitespace = " \t\r\n\v";
 const char *symbols = "<|>&; ()";
 
 void exit_err(char *msg) {
-    printf("%s\n", msg);
+    printf("sh: %s\n", msg);
     exit(1);
 }
 
@@ -41,17 +41,24 @@ struct redircmd {
     int fd;
 };
 
+struct pipecmd {
+    int type;
+    struct cmd *left;
+    struct cmd *right;
+};
+
 // Execute cmd. Never returns.
 void runcmd(struct cmd *cmd) {
     int p[2];
     struct execcmd *ecmd;
     struct redircmd *rcmd;
+    struct pipecmd *pcmd;
 
     if (cmd == NULL) exit(0);
 
     switch (cmd->type) {
         default:
-            exit_err("runcmd: illegal type");
+            exit_err("cmd illegal type");
             break;
         case EXEC:
             ecmd = (struct execcmd *) cmd;
@@ -67,6 +74,40 @@ void runcmd(struct cmd *cmd) {
             } else {
                 runcmd(rcmd->cmd);
             }
+            break;
+        case PIPE:
+            pcmd = (struct pipecmd *) cmd;
+
+            if (sys_pipe(p) < 0) {
+                exit_err("pipe failed");
+            }
+
+            int left_id;
+            if ((left_id = sys_fork()) < 0) {
+                exit_err("fork failed");
+            } else if (left_id == 0) {
+                close(STDOUT_FILENO);
+                sys_dup(p[1]);
+                close(p[0]);
+                close(p[1]);
+                runcmd(pcmd->left);
+            }
+
+            int right_id;
+            if ((right_id = sys_fork()) < 0) {
+                exit_err("fork failed");
+            } else if (right_id == 0) {
+                close(STDIN_FILENO);
+                sys_dup(p[0]);
+                close(p[0]);
+                close(p[1]);
+                runcmd(pcmd->right);
+            }
+
+            close(p[0]);
+            close(p[1]);
+            sys_wait_env_id(left_id);
+            sys_wait_env_id(right_id);
             break;
     }
 
@@ -86,25 +127,37 @@ int getcmd(char *buf, int nbuf) {
 }
 
 struct cmd *execcmd(void) {
-    // FIXME
-    static struct execcmd cmd;
-    memset((void *) &cmd, 0, sizeof(struct execcmd));
-    cmd.type = EXEC;
-    return (struct cmd *) &cmd;
+    struct execcmd *cmd;
+
+    cmd = malloc(sizeof(*cmd));
+    memset((void *) cmd, 0, sizeof(*cmd));
+    cmd->type = EXEC;
+    return (struct cmd *) cmd;
 }
 
 struct cmd *redircmd(struct cmd *subcmd, char *file, char *efile, int mode, int fd) {
-    // FIXME
-    static struct redircmd cmd;
+    struct redircmd *cmd;
 
-    memset((void *) &cmd, 0, sizeof(struct redircmd));
-    cmd.type = REDIR;
-    cmd.cmd = subcmd;
-    cmd.file = file;
-    cmd.efile = efile;
-    cmd.mode = mode;
-    cmd.fd = fd;
-    return (struct cmd *) &cmd;
+    cmd = malloc(sizeof(*cmd));
+    memset((void *) cmd, 0, sizeof(*cmd));
+    cmd->type = REDIR;
+    cmd->cmd = subcmd;
+    cmd->file = file;
+    cmd->efile = efile;
+    cmd->mode = mode;
+    cmd->fd = fd;
+    return (struct cmd *) cmd;
+}
+
+struct cmd *pipecmd(struct cmd *left, struct cmd *right) {
+    struct pipecmd *cmd;
+
+    cmd = malloc(sizeof(*cmd));
+    memset(cmd, 0, sizeof(*cmd));
+    cmd->type = PIPE;
+    cmd->left = left;
+    cmd->right = right;
+    return (struct cmd *) cmd;
 }
 
 int peek(char **ps, char *es, char *toks) {
@@ -159,6 +212,7 @@ int gettoken(char **ps, char *es, char **q, char **eq) {
 }
 
 struct cmd *parseline(char **, char *);
+struct cmd *parsepipe(char **ps, char *es);
 struct cmd *parseexec(char **, char *);
 struct cmd *parseredirs(struct cmd *cmd, char **ps, char *es);
 struct cmd *nulterminate(struct cmd*);
@@ -181,7 +235,23 @@ struct cmd *parsecmd(char *s) {
 struct cmd *parseline(char **ps, char *es) {
     struct cmd *cmd;
 
+    cmd = parsepipe(ps, es);
+
+    // for backcmd
+
+    // for listcmd
+
+    return cmd;
+}
+
+struct cmd *parsepipe(char **ps, char *es) {
+    struct cmd *cmd;
+
     cmd = parseexec(ps, es);
+    if (peek(ps, es, "|")) {
+        gettoken(ps, es, 0, 0);
+        cmd = pipecmd(cmd, parsepipe(ps, es));
+    }
     return cmd;
 }
 
@@ -307,6 +377,7 @@ struct cmd *nulterminate(struct cmd *cmd) {
     int i;
     struct execcmd *ecmd;
     struct redircmd *rcmd;
+    struct pipecmd *pcmd;
 
     if (cmd == NULL) return NULL;
 
@@ -321,6 +392,11 @@ struct cmd *nulterminate(struct cmd *cmd) {
             rcmd = (struct redircmd *) cmd;
             nulterminate(rcmd->cmd);
             *rcmd->efile = 0;
+            break;
+        case PIPE:
+            pcmd = (struct pipecmd *) cmd;
+            nulterminate(pcmd->left);
+            nulterminate(pcmd->right);
             break;
     }
 
