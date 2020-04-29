@@ -1,4 +1,4 @@
-xv6 implemented in Rust.
+[xv6](https://github.com/mit-pdos/xv6-public) implementation in Rust.
 
 ```
 ### run OS
