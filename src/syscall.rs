@@ -1,17 +1,17 @@
 // This file comes from kern/syscall.c in jos. See COPYRIGHT for copyright information.
 
-use crate::constants::SysError;
+use crate::constants::{SysError, MAX_CMD_ARG_LEN, MAX_PATH_LEN, PTE_W};
 use crate::env::EnvId;
 use crate::file::FileDescriptor;
 use crate::fs::Stat;
 use crate::pmap::VirtAddr;
-use crate::sched;
 use crate::{env, sysfile};
+use crate::{sched, util};
 use alloc::vec::Vec;
 use consts::*;
 use core::ptr::null;
-use core::slice;
 use core::str;
+use core::{mem, slice};
 
 mod consts {
     pub(crate) static SYS_CPUTS: u32 = 0;
@@ -84,18 +84,31 @@ fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> i32 {
     }
 }
 
+/// Check a system call argument for path.
+/// It should be in user space and less than MAX_CMD_ARG_LEN.
+/// If check fails, the functino doesn't return.
+fn path_check(arg: *const u8) {
+    let curenv = env::cur_env_mut().expect("curenv should be exist");
+    let len = util::strnlen(arg, MAX_PATH_LEN + 1);
+    if len > MAX_PATH_LEN {
+        let env_table = env::env_table();
+        env::env_destroy(curenv.get_env_id(), env_table);
+    }
+    env::user_mem_assert(curenv, VirtAddr(arg as u32), len, 0);
+}
+
 /// Dispatched to the correct kernel function, passing the arguments.
 pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32, a5: u32) -> i32 {
     if syscall_no == SYS_CPUTS {
         // SYS_CPUTS is deprecated, use SYS_WRITE instead.
         let raw_s = a1 as *const u8;
         let len = a2 as usize;
-        let curenv = env::cur_env_mut().expect("curenv should be exist");
+        let curenv = env::cur_env_mut().expect("curenv should exist");
         env::user_mem_assert(curenv, VirtAddr(raw_s as u32), len, 0);
         sys_write(FileDescriptor(1), raw_s, len)
     } else if syscall_no == SYS_EXIT {
         let _status = a1 as i32;
-        let curenv = env::cur_env_mut().expect("curenv should be exist");
+        let curenv = env::cur_env_mut().expect("curenv should exist");
         println!("[{:08x}] exiting gracefully", curenv.get_env_id());
         let env_table = env::env_table();
         env::env_destroy(curenv.get_env_id(), env_table);
@@ -115,7 +128,9 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         env::env_destroy(env_id, env_table);
         0
     } else if syscall_no == SYS_EXEC {
+        let curenv = env::cur_env_mut().expect("curenv should exist");
         let path = a1 as *const u8;
+        path_check(path);
         let arg_arr = [
             a2 as *const u8,
             a3 as *const u8,
@@ -134,6 +149,7 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         }
     } else if syscall_no == SYS_OPEN {
         let path = a1 as *const u8;
+        path_check(path);
         let mode = a2 as u32;
         sysfile::open(path, mode)
             .map(|fd| fd.0 as i32)
@@ -148,6 +164,10 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let fd = FileDescriptor(a1 as u32);
         let buf = a2 as *mut u8;
         let count = a3 as usize;
+
+        let curenv = env::cur_env_mut().expect("curenv should exist");
+        env::user_mem_assert(curenv, VirtAddr(buf as u32), count, 0);
+
         match env::cur_env_mut().unwrap().fd_get(fd) {
             None => SysError::IllegalFileDescriptor.err_no(),
             Some(ent) => {
@@ -162,9 +182,14 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let fd = FileDescriptor(a1 as u32);
         let buf = a2 as *mut u8;
         let count = a3 as usize;
+
+        let curenv = env::cur_env_mut().expect("curenv should exist");
+        env::user_mem_assert(curenv, VirtAddr(buf as u32), count, PTE_W);
+
         sys_write(fd, buf, count)
     } else if syscall_no == SYS_MKNOD {
         let path = a1 as *const u8;
+        path_check(path);
         let major = a2 as u16;
         let minor = a2 as u16;
         match sysfile::mknod(path, major, minor) {
@@ -192,7 +217,13 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         }
     } else if syscall_no == SYS_FSTAT {
         let fd = FileDescriptor(a1);
-        let statbuf = &mut *(a2 as *mut Stat);
+        let statbuf = {
+            let p = a2 as *mut Stat;
+            let curenv = env::cur_env_mut().expect("curenv should exist");
+            let len = mem::size_of::<Stat>();
+            env::user_mem_assert(curenv, VirtAddr(p as u32), len, PTE_W);
+            &mut *p
+        };
         match sysfile::stat(fd) {
             Err(err) => err.err_no(),
             Ok(stat) => {
@@ -203,18 +234,24 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
     } else if syscall_no == SYS_GETCWD {
         let buf = a1 as *mut u8;
         let size = a2 as usize;
+
+        let curenv = env::cur_env_mut().expect("curenv should exist");
+        env::user_mem_assert(curenv, VirtAddr(buf as u32), size, PTE_W);
+
         match sysfile::getcwd(buf, size) {
             Err(err) => err.err_no(),
             Ok(len) => len as i32,
         }
     } else if syscall_no == SYS_MKDIR {
         let path = a1 as *const u8;
+        path_check(path);
         match sysfile::mkdir(path) {
             Err(err) => err.err_no(),
             Ok(_) => 0,
         }
     } else if syscall_no == SYS_CHDIR {
         let path = a1 as *const u8;
+        path_check(path);
         match sysfile::chdir(path) {
             Err(err) => err.err_no(),
             Ok(_) => 0,
