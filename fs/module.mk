@@ -11,6 +11,7 @@ FS_IMG_FILES := \
 	$(OBJDIR)/user/whello \
 	$(OBJDIR)/user/cat \
 	$(OBJDIR)/user/pipetest \
+	$(OBJDIR)/user/wc \
 
 FS_CFLAGS := -Wall -Wextra -MD -I$(TOP)
 
