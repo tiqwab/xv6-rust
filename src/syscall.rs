@@ -109,6 +109,7 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
     } else if syscall_no == SYS_EXIT {
         let _status = a1 as i32;
         let curenv = env::cur_env_mut().expect("curenv should exist");
+        #[cfg(feature = "debug")]
         println!("[{:08x}] exiting gracefully", curenv.get_env_id());
         let env_table = env::env_table();
         env::env_destroy(curenv.get_env_id(), env_table);

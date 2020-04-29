@@ -244,11 +244,6 @@ fn log_init(dev: u32) -> Log {
     let sb = superblock::get();
     let mut log = Log::new(sb.log_start as usize, sb.nlog as usize, dev);
 
-    println!(
-        "log_init: start = {}, size = {}, dev = {}",
-        log.start, log.size, log.dev
-    );
-
     recover_from_log(&mut log);
 
     log

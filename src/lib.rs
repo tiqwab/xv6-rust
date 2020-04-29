@@ -78,52 +78,25 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
 
 #[no_mangle]
 pub fn lib_main() {
-    let vga_buffer = unsafe { &mut *((0xb8000 + KERN_BASE) as *mut Buffer) };
-    vga_buffer::init_writer(vga_buffer);
-
-    pmap::mem_init();
-
-    unsafe { HeapAllocator::init(KHEAP_BASE as usize, KHEAP_SIZE) };
-
-    {
-        let mut a = alloc::boxed::Box::new(1);
-        *a += 1;
-        println!("a = {}", *a);
-    }
-
     unsafe {
+        let vga_buffer = unsafe { &mut *((0xb8000 + KERN_BASE) as *mut Buffer) };
+        vga_buffer::init_writer(vga_buffer);
+        pmap::mem_init();
+        HeapAllocator::init(KHEAP_BASE as usize, KHEAP_SIZE);
         gdt::init_percpu();
-    }
-    unsafe {
         trap::trap_init();
-    }
-
-    unsafe {
         mpconfig::mp_init();
         lapic::lapic_init();
         // do mp::boot_aps() after preparing processes
+        picirq::pic_init();
+        ide::ide_init();
+        buf::buf_init();
+        kbd::kbd_init();
+        {
+            let mut env_table = env::env_table();
+            env::env_create_for_init(&mut env_table);
+        }
+        mp::boot_aps();
+        sched::sched_yield();
     }
-
-    picirq::pic_init();
-
-    ide::ide_init();
-    buf::buf_init();
-    // log::log_init(1); // TODO: call it at the beginning of the first process execution (ref. forkret in xv6)
-
-    // fs::fs_test(1);
-
-    kbd::kbd_init();
-
-    print!("H");
-    println!("ello");
-    println!("The numbers are {} and {}", 42, 1.0 / 3.0);
-
-    {
-        let mut env_table = env::env_table();
-        env::env_create_for_init(&mut env_table);
-    }
-
-    mp::boot_aps();
-
-    sched::sched_yield();
 }

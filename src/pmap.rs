@@ -804,10 +804,8 @@ pub fn mem_init() {
     let pages = boot_allocator.alloc(npages * page_info_size as u32).0 as *mut PageInfo;
 
     // Allocate kernel heap
-    println!("before: 0x{:x}", boot_allocator.alloc(0).0);
     let kheap = boot_allocator.alloc(KHEAP_SIZE as u32).0 as *mut PageInfo;
     println!("kheap: {:?}", kheap);
-    println!("after: 0x{:x}", boot_allocator.alloc(0).0);
 
     // Now that we've allocated the initial kernel data structures, we set
     // up the list of free physical pages. Once we've done so, all further

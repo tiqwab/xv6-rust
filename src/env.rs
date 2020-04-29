@@ -367,6 +367,7 @@ impl EnvTable {
         // Note the environment's demise.
         {
             let curenv_id = cur_env().map(Env::get_env_id).map(|x| x.0).unwrap_or(0);
+            #[cfg(feature = "debug")]
             println!("[{:08x}] free env {:08x}", curenv_id, env.env_id);
         }
 

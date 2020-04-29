@@ -13,6 +13,9 @@ use core::cmp::min;
 use core::mem;
 use core::ptr::{null, null_mut, slice_from_raw_parts};
 
+// TODO: Summarize disk layout
+// - offset 0x4000 is start of inodes.
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub(crate) enum InodeType {
@@ -132,26 +135,6 @@ pub(crate) struct DInode {
     size: u32,                 // size of file (bytes)
     addrs: [u32; NDIRECT + 1], // data block addresses
 }
-
-// struct InodeCacheEntry {
-//     dev: u32,
-//     inum: u32,
-//     ref_cnt: i32,
-//     valid: i32,
-//     inode: Arc<RwLock<Inode>>,
-// }
-//
-// impl InodeCacheEntry {
-//     const fn new() -> InodeCacheEntry {
-//         InodeCacheEntry {
-//             dev: 0,
-//             inum: 0,
-//             ref_cnt: 0,
-//             valid: 0,
-//             inode: Arc::new(RwLock::new(Inode::new())),
-//         }
-//     }
-// }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct InodeCacheKey {
@@ -301,7 +284,6 @@ pub(crate) fn iupdate(inode: &Inode) {
     dinode.nlink = inode.nlink;
     dinode.size = inode.size;
     unsafe {
-        println!("size_of(ip.addrs): {}", mem::size_of_val(&inode.addrs));
         util::memmove(
             VirtAddr(dinode.addrs.as_ptr() as u32),
             VirtAddr(inode.addrs.as_ptr() as u32),
@@ -497,6 +479,7 @@ pub(crate) fn writei(inode: &mut Inode, mut src: *const u8, mut off: u32, n: u32
         panic!("writei: too large offset");
     }
 
+    #[cfg(feature = "debug")]
     println!("[writei] inum: {}, off: {}, n: {}", inode.inum, off, n);
 
     {
@@ -579,6 +562,7 @@ fn balloc(dev: u32, bcache: &mut BufCache) -> u32 {
                 log::log_write(&mut bp);
                 bcache.release(bp);
                 bzero(dev, blockno + (bi as u32), bcache);
+                #[cfg(feature = "debug")]
                 println!("[balloc] allocated blockno {}", blockno + (bi as u32));
                 return blockno + (bi as u32);
             }
@@ -911,78 +895,4 @@ pub(crate) fn namei(path: *const u8) -> Option<Arc<RwLock<Inode>>> {
 
 pub(crate) fn nameiparent(path: *const u8, name: *mut u8) -> Option<Arc<RwLock<Inode>>> {
     namex(path, true, name)
-}
-
-pub(crate) fn fs_test(dev: u32) {
-    // Create a dir.
-    //
-    // Offset 0x4000 is start of inodes.
-    // Size of DInode is 64 bytes.
-    // Assigned inum was 3.
-    //
-    // ...
-    // 0040c0 02 00 61 00 63 00 01 00 00 00 00 00 00 00 00 00  >..b.c...........<
-    // 0040d0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  >................<
-    // *
-    log::begin_op();
-    let idir = ialloc(dev, InodeType::Dir, 98, 99);
-    let inum = idir.read().inum;
-    {
-        let idir = ilock(&idir);
-        iupdate(&idir);
-        iunlock(idir);
-    }
-    iput(idir);
-    log::end_op();
-
-    log::begin_op();
-    let idir = iget(dev, inum);
-    {
-        let mut idir = ilock(&idir);
-        idir.major -= 1;
-        iupdate(&idir);
-        iunlock(idir);
-    }
-    iput(idir);
-    log::end_op();
-
-    unsafe {
-        //   skipelem("a/bb/c", name) = "bb/c", setting name = "a"
-        //   skipelem("///a//bb", name) = "bb", setting name = "a"
-        //   skipelem("a", name) = "", setting name = "a"
-        //   skipelem("", name) = skipelem("////", name) = 0
-        let path = "a/b//c";
-        let mut name = [0; DIR_SIZ];
-        let mut p = path.as_ptr();
-        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
-        println!("path: {:p}, a: {:p}, name: {:?}", path, p, &name[..]);
-
-        let path = "///a//bb";
-        let mut name = [0; DIR_SIZ];
-        let mut p = path.as_ptr();
-        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
-        println!("path: {:p}, a: {:p}, name: {:?}", path, p, &name[..]);
-
-        let path = ['a' as u8, '\0' as u8];
-        let mut name = [0; DIR_SIZ];
-        let mut p = path.as_ptr();
-        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
-        println!(
-            "path: {:p}, a: {:p}, name: {:?}",
-            path.as_ptr(),
-            p,
-            &name[..]
-        );
-
-        let path = ['\0' as u8];
-        let mut name = [0; DIR_SIZ];
-        let mut p = path.as_ptr();
-        p = skip_elem(p, (&mut name[..]).as_mut_ptr());
-        println!(
-            "path: {:p}, a: {:p}, name: {:?}",
-            path.as_ptr(),
-            p,
-            &name[..]
-        );
-    }
 }
