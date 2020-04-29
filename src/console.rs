@@ -1,8 +1,8 @@
 use crate::fs::Inode;
 use crate::spinlock::{Mutex, MutexGuard};
-use crate::{kbd, sched, serial, vga_buffer, x86};
+use crate::{kbd, serial, vga_buffer};
+use core::fmt;
 use core::ptr::slice_from_raw_parts;
-use core::{cmp, fmt};
 
 static CONSOLE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -30,7 +30,7 @@ macro_rules! println {
 pub(crate) fn console_write(_inode: &Inode, buf: *const u8, count: usize) -> i32 {
     let sli = unsafe { &*slice_from_raw_parts(buf, count) };
     match core::str::from_utf8(sli) {
-        Err(err) => {
+        Err(_) => {
             println!("Error in console_write: failed to create str");
             -1
         }

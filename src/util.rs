@@ -1,5 +1,4 @@
 use crate::pmap::VirtAddr;
-use core::cmp;
 
 pub(crate) unsafe fn memset(va: VirtAddr, c: u8, n: usize) {
     let mut p = va.0 as *mut u8;

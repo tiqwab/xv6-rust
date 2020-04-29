@@ -4,7 +4,7 @@ use crate::pmap::{PhysAddr, VirtAddr};
 use crate::{lapic, x86};
 use consts::*;
 use core::mem;
-use core::ptr::{null, null_mut, slice_from_raw_parts};
+use core::ptr::{null_mut, slice_from_raw_parts};
 
 /*
  * See MultiProcessor Specification (MP)

@@ -1,8 +1,8 @@
 use crate::constants::*;
+use crate::ide;
 use crate::spinlock::{Mutex, MutexGuard};
-use crate::{ide, util};
 use consts::*;
-use core::ptr::{null_mut, slice_from_raw_parts, slice_from_raw_parts_mut};
+use core::ptr::{slice_from_raw_parts, slice_from_raw_parts_mut};
 
 pub(crate) mod consts {
     use crate::constants::MAX_OP_BLOCKS;

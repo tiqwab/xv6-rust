@@ -5,7 +5,6 @@
 use crate::kbd::consts::*;
 use crate::trap::consts::IRQ_KBD;
 use crate::{picirq, x86};
-use core::ptr::null;
 
 mod consts {
     // I/O port

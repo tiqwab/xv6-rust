@@ -1,6 +1,6 @@
 use core::mem;
 use core::ops::{Add, AddAssign, Deref, DerefMut, Index, IndexMut, Sub};
-use core::ptr::{null, null_mut, slice_from_raw_parts};
+use core::ptr::{null_mut, slice_from_raw_parts};
 
 use crate::constants::*;
 use crate::kclock;

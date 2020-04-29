@@ -13,7 +13,6 @@
 #![feature(option_result_contains)]
 #![feature(try_trait)]
 #![feature(fn_traits)]
-// FIXME: remove later
 #![allow(dead_code)]
 
 // This must come first to resolve macro?
@@ -79,7 +78,7 @@ fn alloc_error_handler(layout: alloc::alloc::Layout) -> ! {
 #[no_mangle]
 pub fn lib_main() {
     unsafe {
-        let vga_buffer = unsafe { &mut *((0xb8000 + KERN_BASE) as *mut Buffer) };
+        let vga_buffer = &mut *((0xb8000 + KERN_BASE) as *mut Buffer);
         vga_buffer::init_writer(vga_buffer);
         pmap::mem_init();
         HeapAllocator::init(KHEAP_BASE as usize, KHEAP_SIZE);

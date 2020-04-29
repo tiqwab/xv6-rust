@@ -2,7 +2,6 @@
 
 use crate::pmap::VirtAddr;
 use core::mem;
-use core::ptr::null;
 
 pub(crate) const ELF_MAGIC: u32 = 0x464c457f;
 

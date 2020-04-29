@@ -5,8 +5,6 @@ use crate::rwlock::RwLock;
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::{fs, log, pipe};
 use alloc::sync::Arc;
-use core::ops::Try;
-use core::ptr::read;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum FileType {

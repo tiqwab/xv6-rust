@@ -2,12 +2,12 @@ use crate::constants::*;
 use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::{DirEnt, Inode, InodeType, Stat};
 use crate::pmap::VirtAddr;
-use crate::rwlock::{RwLock, RwLockWriteGuard};
+use crate::rwlock::RwLock;
 use crate::{env, file, fs, log, pipe, util};
 use alloc::sync::Arc;
 use consts::*;
 use core::ops::Try;
-use core::ptr::{null, null_mut, slice_from_raw_parts};
+use core::ptr::{null, null_mut};
 use core::{cmp, mem};
 
 pub(crate) mod consts {
@@ -462,7 +462,7 @@ pub(crate) fn pipe() -> Result<(FileDescriptor, FileDescriptor), SysError> {
     match pipe::alloc() {
         None => Err(SysError::TooManyFiles),
         Some((ent0, ent1)) => {
-            let mut env = env::cur_env_mut().unwrap();
+            let env = env::cur_env_mut().unwrap();
             let fd0_opt = env.fd_alloc(ent0);
             let fd1_opt = env.fd_alloc(ent1);
             let mut ft = file::file_table();

@@ -3,7 +3,7 @@
 
 use core::cell::UnsafeCell;
 use core::fmt;
-use core::fmt::{Error, Formatter};
+use core::fmt::Formatter;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{spin_loop_hint as cpu_relax, AtomicBool, Ordering};
 

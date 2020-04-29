@@ -6,12 +6,8 @@
 use crate::buf::consts::{BUF_FLAGS_DIRTY, BUF_FLAGS_VALID};
 use crate::buf::Buf;
 use crate::constants::*;
-use crate::pmap::VirtAddr;
-use crate::spinlock::Mutex;
-use crate::trap::consts::IRQ_IDE;
-use crate::{picirq, util, x86};
+use crate::x86;
 use consts::*;
-use core::ptr::null_mut;
 
 mod consts {
     // status

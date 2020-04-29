@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use core::ptr::{null, null_mut};
+use core::ptr::null;
 
 use crate::constants::*;
 use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType};
@@ -141,10 +141,7 @@ impl Env {
     }
 
     pub(crate) fn fd_close(&mut self, fd: FileDescriptor) -> FileTableEntry {
-        assert!(
-            (fd.0 as usize) >= 0 && (fd.0 as usize) < self.env_ofile.len(),
-            "illegal fd"
-        );
+        assert!((fd.0 as usize) < self.env_ofile.len(), "illegal fd");
         let ent = self.env_ofile[fd.0 as usize].take();
         ent.expect("illegal fd")
     }
@@ -365,9 +362,9 @@ impl EnvTable {
         }
 
         // Note the environment's demise.
+        #[cfg(feature = "debug")]
         {
             let curenv_id = cur_env().map(Env::get_env_id).map(|x| x.0).unwrap_or(0);
-            #[cfg(feature = "debug")]
             println!("[{:08x}] free env {:08x}", curenv_id, env.env_id);
         }
 
@@ -481,7 +478,7 @@ fn env_setup_vm() -> Box<PageDirectory> {
     PageDirectory::new_for_user()
 }
 
-use crate::file::{File, FileDescriptor, FileTableEntry};
+use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::Inode;
 use crate::rwlock::RwLock;
 use alloc::sync::Arc;
@@ -654,7 +651,7 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
 
     // Read program header and set up memory
     for i in 0..elf.e_phnum {
-        let bs = {
+        {
             let off = elf.e_phoff + (mem::size_of::<Proghdr>() as u32) * (i as u32);
             if fs::readi(
                 &mut inode,
@@ -665,7 +662,7 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
             {
                 panic!("exec: failed to read program header");
             }
-        };
+        }
 
         if ph.p_type != ProghdrType::PtLoad {
             continue;

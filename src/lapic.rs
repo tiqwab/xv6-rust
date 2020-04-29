@@ -3,7 +3,7 @@
 use crate::constants::*;
 use crate::pmap::{PhysAddr, VirtAddr};
 use crate::trap::consts::{IRQ_ERROR, IRQ_OFFSET, IRQ_SPURIOUS, IRQ_TIMER};
-use crate::{kclock, mpconfig, pmap, x86};
+use crate::{kclock, mpconfig, pmap};
 use consts::*;
 
 mod consts {

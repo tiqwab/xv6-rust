@@ -2,7 +2,7 @@
 // spin-rs (https://github.com/mvdnes/spin-rs)
 
 use core::cell::UnsafeCell;
-use core::fmt::{Error, Formatter};
+use core::fmt::Formatter;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;

@@ -47,9 +47,7 @@ pub(crate) fn serial() -> MutexGuard<'static, Serial> {
 
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
-    unsafe {
-        serial().write_fmt(args).unwrap();
-    }
+    serial().write_fmt(args).unwrap();
 }
 
 #[allow(dead_code)]

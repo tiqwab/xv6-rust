@@ -1,8 +1,6 @@
 // The part of this file comes from jos (kern/env.c) and redox (kernel/src/arch/x86_64/gdt.rs).
 // See COPYRIGHT for copyright information.
 
-use core::ptr::null;
-
 use crate::mpconfig::consts::MAX_NUM_CPU;
 use crate::pmap::{PhysAddr, VirtAddr};
 use crate::x86;

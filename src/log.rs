@@ -1,4 +1,3 @@
-use crate::buf::consts::BUF_FLAGS_DIRTY;
 use crate::buf::BufCacheHandler;
 use crate::constants::{BLK_SIZE, LOG_SIZE, MAX_OP_BLOCKS, ROOT_DEV};
 use crate::once::Once;

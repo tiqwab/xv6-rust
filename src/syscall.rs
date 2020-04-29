@@ -1,6 +1,6 @@
 // This file comes from kern/syscall.c in jos. See COPYRIGHT for copyright information.
 
-use crate::constants::{SysError, MAX_CMD_ARG_LEN, MAX_PATH_LEN, PTE_W};
+use crate::constants::{SysError, MAX_PATH_LEN, PTE_W};
 use crate::env::EnvId;
 use crate::file::FileDescriptor;
 use crate::fs::Stat;
@@ -9,9 +9,9 @@ use crate::{env, sysfile};
 use crate::{sched, util};
 use alloc::vec::Vec;
 use consts::*;
+use core::mem;
 use core::ptr::null;
 use core::str;
-use core::{mem, slice};
 
 mod consts {
     pub(crate) static SYS_CPUTS: u32 = 0;
@@ -129,7 +129,6 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         env::env_destroy(env_id, env_table);
         0
     } else if syscall_no == SYS_EXEC {
-        let curenv = env::cur_env_mut().expect("curenv should exist");
         let path = a1 as *const u8;
         path_check(path);
         let arg_arr = [

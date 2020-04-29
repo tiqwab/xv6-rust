@@ -1,17 +1,17 @@
-use crate::buf::{buf_cache, BufCache, BufCacheHandler};
+use crate::buf::{BufCache, BufCacheHandler};
 use crate::constants::*;
 use crate::once::Once;
 use crate::pmap::VirtAddr;
-use crate::rwlock::{RwLock, RwLockUpgradeableGuard, RwLockWriteGuard};
-use crate::spinlock::{Mutex, MutexGuard};
+use crate::rwlock::{RwLock, RwLockWriteGuard};
+use crate::spinlock::Mutex;
 use crate::superblock::SuperBlock;
-use crate::{buf, device, env, file, log, superblock, util};
+use crate::{buf, device, env, log, superblock, util};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::cmp::min;
 use core::mem;
-use core::ptr::{null, null_mut, slice_from_raw_parts};
+use core::ptr::{null, null_mut};
 
 // TODO: Summarize disk layout
 // - offset 0x4000 is start of inodes.
@@ -628,7 +628,7 @@ impl DirEnt {
 
         let mut dst = self.name.as_mut_ptr();
         let mut src = new_name;
-        for i in 0..DIR_SIZ {
+        for _ in 0..DIR_SIZ {
             unsafe {
                 *dst = *src;
                 dst = dst.add(1);

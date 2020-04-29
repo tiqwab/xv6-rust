@@ -1,6 +1,6 @@
 use crate::constants::SysError;
 use crate::file;
-use crate::file::{File, FileTableEntry};
+use crate::file::FileTableEntry;
 use crate::rwlock::RwLock;
 use alloc::sync::Arc;
 use consts::*;
@@ -35,7 +35,7 @@ impl Pipe {
     /// Return 0 if there is no data and write-edge of the pipe is already closed,
     /// otherwise return SysError::TryAgain (and caller will retry again).
     pub(crate) fn read(&mut self, addr: *mut u8, n: usize) -> Result<usize, SysError> {
-        let mut len = cmp::min((self.nwrite - self.nread) as usize, n);
+        let len = cmp::min((self.nwrite - self.nread) as usize, n);
         if len == 0 {
             if !self.write_open {
                 return Ok(0);
