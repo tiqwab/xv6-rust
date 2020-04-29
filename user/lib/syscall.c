@@ -26,6 +26,7 @@
 #define SYS_GETCWD 17
 #define SYS_MKDIR 18
 #define SYS_CHDIR 19
+#define SYS_PIPE 20
 
 static inline int syscall(int num, int a1, int a2, int a3, int a4, int a5) {
     int ret;
@@ -149,4 +150,8 @@ int sys_mkdir(char *path) {
 
 int sys_chdir(char *path) {
     return syscall(SYS_CHDIR, (int) path, 0, 0, 0, 0);
+}
+
+int sys_pipe(int pipefd[2]) {
+    return syscall(SYS_PIPE, (int) pipefd, 0, 0, 0, 0);
 }

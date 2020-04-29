@@ -407,23 +407,21 @@ impl EnvTable {
 
     /// Release the entry of EnvTable.
     /// Parent process uses this when it waits child process.
-    fn env_release(&mut self, env_id: EnvId) -> Option<EnvId> {
-        let child_opt = self.find(env_id).and_then(|child| {
-            if !child.is_zombie() {
-                None
-            } else {
-                Some(child)
-            }
-        });
+    fn env_child_release(
+        &mut self,
+        env_id: EnvId,
+        parent_env_id: EnvId,
+    ) -> Result<EnvId, SysError> {
+        let _child = match self.find(env_id) {
+            None => Err(SysError::NotChild),
+            Some(child) if child.env_parent_id != parent_env_id => Err(SysError::NotChild),
+            Some(child) if !child.is_zombie() => Err(SysError::TryAgain),
+            Some(child) => Ok(child),
+        }?;
 
-        match child_opt {
-            None => None,
-            Some(_) => {
-                let idx = self.get_idx(env_id).unwrap();
-                self.envs[idx] = None;
-                Some(env_id)
-            }
-        }
+        let idx = self.get_idx(env_id).unwrap();
+        self.envs[idx] = None;
+        Ok(env_id)
     }
 
     /// Create a new process copying p as the parent.
@@ -729,9 +727,10 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
     // TODO: is there any other things to do here?
 }
 
-pub(crate) fn wait_env_id(env_id: EnvId) -> Option<EnvId> {
+pub(crate) fn wait_env_id(env_id: EnvId) -> Result<EnvId, SysError> {
+    let cur_env_id = cur_env().unwrap().env_id;
     let mut env_table = env_table();
-    env_table.env_release(env_id)
+    env_table.env_child_release(env_id, cur_env_id)
 }
 
 /// Allocate user heap.

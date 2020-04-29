@@ -114,7 +114,9 @@ pub(crate) enum SysError {
     TooManyFiles,
     TooManyFileDescriptors,
     IllegalFileDescriptor,
-    TryAgain, // Try again
+    TryAgain,   // Try again
+    BrokenPipe, // Broken pipe
+    NotChild,   // Not child process
 }
 
 impl SysError {

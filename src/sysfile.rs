@@ -3,7 +3,7 @@ use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::{DirEnt, Inode, InodeType, Stat};
 use crate::pmap::VirtAddr;
 use crate::rwlock::{RwLock, RwLockWriteGuard};
-use crate::{env, file, fs, log, util};
+use crate::{env, file, fs, log, pipe, util};
 use alloc::sync::Arc;
 use consts::*;
 use core::ops::Try;
@@ -456,4 +456,36 @@ pub(crate) fn getcwd(buf: *mut u8, size: usize) -> Result<usize, SysError> {
         unsafe { *buf.add(len) = 0 };
         len
     })
+}
+
+pub(crate) fn pipe() -> Result<(FileDescriptor, FileDescriptor), SysError> {
+    match pipe::alloc() {
+        None => Err(SysError::TooManyFiles),
+        Some((ent0, ent1)) => {
+            let mut env = env::cur_env_mut().unwrap();
+            let fd0_opt = env.fd_alloc(ent0);
+            let fd1_opt = env.fd_alloc(ent1);
+            let mut ft = file::file_table();
+            match (fd0_opt, fd1_opt) {
+                (Err(ent0), Err(ent1)) => {
+                    ft.close(ent0);
+                    ft.close(ent1);
+                    Err(SysError::TooManyFileDescriptors)
+                }
+                (Err(ent0), Ok(fd1)) => {
+                    ft.close(ent0);
+                    let ent1 = env.fd_close(fd1);
+                    ft.close(ent1);
+                    Err(SysError::TooManyFileDescriptors)
+                }
+                (Ok(fd0), Err(ent1)) => {
+                    ft.close(ent1);
+                    let ent0 = env.fd_close(fd0);
+                    ft.close(ent0);
+                    Err(SysError::TooManyFileDescriptors)
+                }
+                (Ok(fd0), Ok(fd1)) => Ok((fd0, fd1)),
+            }
+        }
+    }
 }

@@ -21,6 +21,7 @@
 typedef int size_t;
 typedef unsigned int uintptr_t;
 
+// should use printf instead
 void sys_cputs(const char *s, int len);
 void sys_exit(int status);
 void sys_yield(void);
@@ -40,6 +41,7 @@ int sys_fstat(int fd, struct stat *statbuf);
 char *sys_getcwd(char *buf, unsigned int usize);
 int sys_mkdir(char *path);
 int sys_chdir(char *path);
+int sys_pipe(int pipefd[2]);
 
 size_t strlen(const char *s);
 size_t strnlen(const char *s, size_t maxlen);
@@ -61,5 +63,6 @@ int open(char *path, int mode);
 int close(int fd);
 int read(int fd, char *buf, int count);
 int write(int fd, char *buf, int count);
+void wait_env_id(int pid);
 
 #endif /* _XV6RUST_USER_USER_H */
