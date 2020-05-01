@@ -787,7 +787,13 @@ pub fn mem_init() {
     let (npages, npages_basemem) = i386_detect_memory();
 
     // create initial page directory.
-    let bss_end = VirtAddr(unsafe { &end as *const _ as u32 });
+    let bss_end = VirtAddr(unsafe { &end as *const _ as u32 }).round_up(PGSIZE as usize);
+    unsafe {
+        println!(
+            "end: {:p}, bss_end(end rounded up by page size): 0x{:x}",
+            &end, bss_end.0
+        )
+    };
     let mut boot_allocator = BootAllocator::new(bss_end);
     let kern_pgdir_va = boot_allocator.alloc(PGSIZE);
     let mut kern_pgdir = KERN_PGDIR.lock();
