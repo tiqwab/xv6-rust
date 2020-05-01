@@ -56,12 +56,12 @@ SECTIONS
 
 	.bss : {
 		PROVIDE(edata = .);
-		*(.bss)
-		PROVIDE(end = .);
-		BYTE(0)
-        . = ALIGN(0x1000);
+		*(.dynbss)
+		*(.bss .bss.*)
+		*(COMMON)
+ 		PROVIDE(end = .);
+ 		. = ALIGN(0x1000);
 	}
-
 
 	/DISCARD/ : {
 		*(.eh_frame .note.GNU-stack)
