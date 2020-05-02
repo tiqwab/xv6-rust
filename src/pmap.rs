@@ -588,6 +588,30 @@ impl IndexMut<PDX> for PageDirectory {
     }
 }
 
+// Only user space is freed by Drop.
+// KernelPageDirectory is treated as pointer, so drop is never called.
+impl Drop for PageDirectory {
+    fn drop(&mut self) {
+        #[cfg(feature = "debug")]
+        println!("Drop PageDirectory at 0x{:x}", self.vaddr().0);
+
+        // Flush all mapped pages in the user portion of the address space
+        assert_eq!(UTOP % (PTSIZE as u32), 0);
+        let start_pdx = PDX::new(VirtAddr(0));
+        let end_pdx = PDX::new(VirtAddr(UTOP));
+        let mut pdx = start_pdx;
+        while pdx < end_pdx {
+            let pde = &self[pdx];
+            // only look at mapped page tables
+            if pde.exists() {
+                // unmap all PTEs in this page table
+                self.remove_pde(pdx);
+            }
+            pdx += 1;
+        }
+    }
+}
+
 #[derive(Debug)]
 #[repr(C)]
 pub(crate) struct PDE(u32);
