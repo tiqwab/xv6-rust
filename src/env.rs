@@ -368,20 +368,8 @@ impl EnvTable {
             println!("[{:08x}] free env {:08x}", curenv_id, env.env_id);
         }
 
-        // Flush all mapped pages in the user portion of the address space
-        assert_eq!(UTOP % (PTSIZE as u32), 0);
-        let start_pdx = PDX::new(VirtAddr(0));
-        let end_pdx = PDX::new(VirtAddr(UTOP));
-        let mut pdx = start_pdx;
-        while pdx < end_pdx {
-            let pde = &env.env_pgdir[pdx];
-            // only look at mapped page tables
-            if pde.exists() {
-                // unmap all PTEs in this page table
-                env.env_pgdir.remove_pde(pdx);
-            }
-            pdx += 1;
-        }
+        // Flush all mapped pages in the user portion of the address space.
+        // This is handled by Drop trait of PageDirectory, so do nothing here.
 
         // free the page directory
         // The allocation of pgdir is currently managed by rust,

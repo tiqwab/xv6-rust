@@ -588,6 +588,30 @@ impl IndexMut<PDX> for PageDirectory {
     }
 }
 
+// Only user space is freed by Drop.
+// KernelPageDirectory is treated as pointer, so drop is never called.
+impl Drop for PageDirectory {
+    fn drop(&mut self) {
+        #[cfg(feature = "debug")]
+        println!("Drop PageDirectory at 0x{:x}", self.vaddr().0);
+
+        // Flush all mapped pages in the user portion of the address space
+        assert_eq!(UTOP % (PTSIZE as u32), 0);
+        let start_pdx = PDX::new(VirtAddr(0));
+        let end_pdx = PDX::new(VirtAddr(UTOP));
+        let mut pdx = start_pdx;
+        while pdx < end_pdx {
+            let pde = &self[pdx];
+            // only look at mapped page tables
+            if pde.exists() {
+                // unmap all PTEs in this page table
+                self.remove_pde(pdx);
+            }
+            pdx += 1;
+        }
+    }
+}
+
 #[derive(Debug)]
 #[repr(C)]
 pub(crate) struct PDE(u32);
@@ -820,7 +844,6 @@ pub fn mem_init() {
     let mut allocator = PAGE_ALLOCATOR.lock();
     allocator.init(pages, &mut boot_allocator, npages, npages_basemem);
     println!("pages: 0x{:?}", pages);
-
     println!("page_free_list: 0x{:?}", allocator.page_free_list);
 
     // Now we set up virtual memory
@@ -1015,6 +1038,14 @@ impl PageAllocator {
                 _ => {}
             }
 
+            #[cfg(feature = "debug")]
+            println!(
+                "[PageAllocator] alloc. pp: {:p}, phys: {:x}, page_free_list: {:p}",
+                pp,
+                self.to_pa(pp).0,
+                self.page_free_list
+            );
+
             (*pp).pp_ref = 0;
             (*pp).pp_link = null_mut();
 
@@ -1067,9 +1098,23 @@ impl PageAllocator {
             assert_ne!(pp, null_mut(), "pp should not be null");
             assert_eq!((*pp).pp_ref, 0, "pp_ref should be zero");
             assert_eq!((*pp).pp_link, null_mut(), "pp_link should be null");
+
+            #[cfg(feature = "debug")]
+            println!("[PageAllocator] free page_info {:p} ", pp);
             (*pp).pp_link = self.page_free_list;
             self.page_free_list = pp;
         }
+    }
+
+    /// Return count of free pages.
+    pub(crate) fn count(&self) -> usize {
+        let mut n = 0;
+        let mut ptr = self.page_free_list;
+        while ptr != null_mut() {
+            n += 1;
+            ptr = unsafe { (*ptr).pp_link };
+        }
+        n
     }
 }
 
@@ -1081,4 +1126,9 @@ pub(crate) fn percpu_kstacks() -> &'static [CpuStack] {
 pub(crate) fn load_kern_pgdir() {
     let kern_pgdir = KERN_PGDIR.lock();
     x86::lcr3(kern_pgdir.paddr());
+}
+
+pub(crate) fn free_page_count() -> usize {
+    let allocator = PAGE_ALLOCATOR.lock();
+    allocator.count()
 }

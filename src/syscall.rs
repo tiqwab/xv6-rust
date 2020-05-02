@@ -5,7 +5,7 @@ use crate::env::EnvId;
 use crate::file::FileDescriptor;
 use crate::fs::Stat;
 use crate::pmap::VirtAddr;
-use crate::{env, sysfile};
+use crate::{env, pmap, sysfile};
 use crate::{sched, util};
 use alloc::vec::Vec;
 use consts::*;
@@ -121,6 +121,8 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         let env_id = sys_get_env_id();
         env_id.0 as i32
     } else if syscall_no == SYS_FORK {
+        #[cfg(feature = "debug")]
+        println!("free_page_count before fork: {}", pmap::free_page_count());
         let env_id = sys_fork();
         env_id.0 as i32
     } else if syscall_no == SYS_KILL {
@@ -129,6 +131,8 @@ pub(crate) unsafe fn syscall(syscall_no: u32, a1: u32, a2: u32, a3: u32, a4: u32
         env::env_destroy(env_id, env_table);
         0
     } else if syscall_no == SYS_EXEC {
+        #[cfg(feature = "debug")]
+        println!("free_page_count before fork: {}", pmap::free_page_count());
         let path = a1 as *const u8;
         path_check(path);
         let arg_arr = [
