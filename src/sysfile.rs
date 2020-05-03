@@ -382,9 +382,8 @@ pub(crate) fn exec(orig_path: *const u8, orig_argv: &[*const u8]) -> Result<(), 
             argv[i] = argv_stack[i].as_ptr() as *const u8;
         }
 
-        env::exec(path.as_ptr(), &argv[0..orig_argv.len()], env);
+        env::exec(path.as_ptr(), &argv[0..orig_argv.len()], env)
     }
-    Ok(())
 }
 
 /// Return the length of name (exclusive '\0' at the end)

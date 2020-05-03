@@ -470,7 +470,7 @@ use crate::file::{FileDescriptor, FileTableEntry};
 use crate::fs::Inode;
 use crate::rwlock::RwLock;
 use alloc::sync::Arc;
-use core::ops::Add;
+use core::ops::{Add, Try};
 
 /// Allocates a new env with env_alloc, loads the named elf
 /// binary into it with load_icode, and sets its env_type.
@@ -604,7 +604,13 @@ fn load_from_disk(mut dst: VirtAddr, inode: &mut Inode, mut off: u32, mut remain
     }
 }
 
-pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
+pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) -> Result<(), SysError> {
+    // check path and return error without changing pgdir if path is illegal.
+    let ip = fs::namei(path)
+        .into_result()
+        .map_err(|_| SysError::InvalidArg)?;
+    let mut inode = fs::ilock(&ip);
+
     // Allocate and set up the page directory for this environment.
     let new_pgdir = env_setup_vm();
     env.env_pgdir = new_pgdir;
@@ -613,10 +619,6 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
     x86::lcr3(env.get_pgdir_paddr());
 
     log::begin_op();
-
-    let ip = fs::namei(path).unwrap();
-
-    let mut inode = fs::ilock(&ip);
 
     // Read ELF header
     let mut buf_elf = [0 as u8; mem::size_of::<Elf>()];
@@ -710,8 +712,7 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
 
     // Set trapframe
     env.set_entry_point(elf.entry_point());
-
-    // TODO: is there any other things to do here?
+    Ok(())
 }
 
 pub(crate) fn wait_env_id(env_id: EnvId) -> Result<EnvId, SysError> {
