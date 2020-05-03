@@ -687,7 +687,8 @@ pub(crate) fn exec(path: *const u8, argv: &[*const u8], env: &mut Env) {
         for (i, s) in argv.iter().enumerate() {
             let len = util::strnlen(*s, MAX_CMD_ARG_LEN);
             sp = sp.sub(len + 1);
-            util::strncpy(sp, *s, len + 1);
+            util::strncpy(sp, *s, len);
+            *(sp.add(len)) = b'\0';
             ustack[3 + i] = sp as u32;
         }
         sp = sp.sub(mem::size_of_val(&ustack));

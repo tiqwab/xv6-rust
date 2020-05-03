@@ -46,7 +46,7 @@ void ls(char *path) {
                 break;
             }
             strcpy(buf, path);
-            p = buf + strlen(buf);
+            p = buf + strlen(path);
             *p++ = '/';
 
             sz = 0;
@@ -56,8 +56,8 @@ void ls(char *path) {
                 if (de.inum == 0) {
                     continue;
                 }
-                memmove(p, de.name, DIR_SIZ);
-                p[DIR_SIZ] = 0;
+                strcpy(p, de.name);
+                *(p + strlen(de.name)) = 0;
                 if (stat(buf, &st) < 0) {
                     printf("ls: cannot stat %s\n", buf);
                     continue;
