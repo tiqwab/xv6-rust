@@ -1,3 +1,4 @@
+// FIXME: the same definition is in src/constants.rs
 enum errno {
     E_UNSPECIFIED = 1,
     E_NO_ENT,

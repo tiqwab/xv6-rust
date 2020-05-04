@@ -329,6 +329,7 @@ void umain(int argc, char **argv) {
             }
         } else {
             // check cmd existence
+            // FIXME: it ignores the right command of pipe
             char cmd[BUF_LEN];
             memmove(cmd, buf, BUF_LEN);
             char *cmd_end = strchr(cmd, ' ');

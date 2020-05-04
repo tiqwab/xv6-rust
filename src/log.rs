@@ -204,7 +204,6 @@ fn recover_from_log(log: &mut Log) {
 pub(crate) fn log_write(buf: &mut BufCacheHandler) {
     let mut log = get_log();
 
-    // FIXME: LOG_SIZE and log.size have the same value, don't they?
     if log.lh.n >= LOG_SIZE || log.lh.n >= log.size - 1 {
         panic!("too big a transaction");
     }

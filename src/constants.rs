@@ -38,8 +38,7 @@ pub(crate) const UHEAPBASE: u32 = USTACKTOP - USTACKSIZE - (UHEAPSIZE as u32);
 pub(crate) const UHEAPSIZE: usize = 3 * PTSIZE; // maximum heap size for user
 
 // Physical address of startup code for non-boot CPUs (APs)
-// #[no_mangle]
-// pub static MPENTRY_PADDR: u32 = 0x7000;
+// FIXME: the same definition is in src/mpentry.S
 pub(crate) const MPENTRY_PADDR: u32 = 0x7000;
 
 // CR0
@@ -104,7 +103,7 @@ pub(crate) const MAX_CMD_ARGS: usize = 10; // maximum number of arguments
 pub(crate) const MAX_PATH_LEN: usize = 32; // maximum length of an absolute path
 
 // system call error
-// FIXME: duplicated in user/error.h
+// FIXME: the same definition is in user/errno.h
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SysError {
     Unspecified = 1,

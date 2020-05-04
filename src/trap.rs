@@ -40,8 +40,9 @@ pub(crate) mod consts {
     pub(crate) const T_SIMDERR: u32 = 19; // SIMD floating point error
                                           // These are arbitrarily chosen, but with care not ot overlap
                                           // processor defined exceptions or interrupt vectors.
+
+    // FIXME: the same definition is in user/lib/syscall.c
     pub(crate) const T_SYSCALL: u32 = 48; // system call
-    pub(crate) const T_DEFAULT: u32 = 19; // catchall
 
     // System segment type bits
     pub(crate) const STS_IG32: u8 = 0xe; // 32-bit Interrupt Gate

@@ -42,17 +42,16 @@ enum EnvStatus {
 
 #[repr(C)]
 pub(crate) struct Env {
-    env_tf: Trapframe,     // Saved registers
-    env_id: EnvId,         // Unique environment identifier
-    env_parent_id: EnvId,  // env_id of this env's parent
-    env_type: EnvType,     // Indicates special system environments
-    env_status: EnvStatus, // Status of the environment
-    env_runs: u32,         // Number of times environment has run
-    // FIXME: what type is better for env_pgdir?
-    env_pgdir: Box<PageDirectory>, // Kernel virtual address of page dir
-    env_cwd: Arc<RwLock<Inode>>,   // Current working directory
+    env_tf: Trapframe,                                  // Saved registers
+    env_id: EnvId,                                      // Unique environment identifier
+    env_parent_id: EnvId,                               // env_id of this env's parent
+    env_type: EnvType,                                  // Indicates special system environments
+    env_status: EnvStatus,                              // Status of the environment
+    env_runs: u32,                                      // Number of times environment has run
+    env_pgdir: Box<PageDirectory>,                      // Kernel virtual address of page dir
+    env_cwd: Arc<RwLock<Inode>>,                        // Current working directory
     env_ofile: [Option<FileTableEntry>; NFILE_PER_ENV], // Open files
-    env_heap_size: usize,          // allocated user heap size
+    env_heap_size: usize,                               // allocated user heap size
 }
 
 impl PartialEq for Env {

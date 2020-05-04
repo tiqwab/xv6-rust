@@ -13,6 +13,7 @@ use core::mem;
 use core::ptr::null;
 use core::str;
 
+// FIXME: the same definition is in user/lib/syscall.c
 mod consts {
     pub(crate) static SYS_CPUTS: u32 = 0;
     pub(crate) static SYS_GETC: u32 = 1;

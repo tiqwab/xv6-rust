@@ -2,10 +2,10 @@
 
 #include "../user.h"
 
-// TODO: share with kernel
+// FIXME: the same definition is in src/trap.rs
 #define T_SYSCALL 0x30
 
-// TODO: share with kernel
+// FIXME: the same definition is in src/syscall.rs
 #define SYS_CPUTS 0
 #define SYS_GETC 1
 #define SYS_EXIT 2

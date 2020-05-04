@@ -426,7 +426,6 @@ impl PageDirectory {
     ///   0 on success
     ///   -E_NO_MEM, if page table couldn't be allocated
     fn insert(&mut self, pa: PhysAddr, va: VirtAddr, perm: u32, allocator: &mut PageAllocator) {
-        // TODO: should use Result
         let old_pte = self.walk(va, true, allocator).unwrap();
         // increment first to handle the corner case: the same PageInfo is re-inserted at the same virtual address
         let new_pte = PTE::new(pa, perm | PTE_P);
@@ -531,8 +530,6 @@ impl PageDirectory {
     }
 
     /// Copy src's pages in user region to self.
-    ///
-    /// FIXME: this might be inefficient because all of the present mappings are eagerly copied.
     pub(crate) fn copy_uvm(&mut self, src: &mut PageDirectory) {
         let mut va = VirtAddr(0);
         let end_va = VirtAddr(UTOP);
@@ -995,7 +992,6 @@ impl PageAllocator {
             self.page_free_list = page as *mut PageInfo;
         }
 
-        // FIXME later
         // It is necessary to reverse the order because
         // entry_pgdir doesn't map the higher addresses.
         unsafe {

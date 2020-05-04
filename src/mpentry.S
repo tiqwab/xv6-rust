@@ -28,7 +28,7 @@
 #    - it uses MPBOOTPHYS to calculate absolute addresses of its
 #      symbols, rather than relying on the linker to fill them
 
-# FIXME: this value also appears in src/constatns.rs
+# FIXME: the same definition is in src/constatns.rs
 #define MPENTRY_PADDR 0x7000
 
 #define RELOC(x) ((x) - KERNBASE)
