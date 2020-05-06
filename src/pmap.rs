@@ -164,7 +164,8 @@ pub(crate) struct PhysAddr(pub(crate) u32);
 
 impl PhysAddr {
     pub(crate) fn to_va(&self) -> VirtAddr {
-        assert!(self.0 <= 0xf0000000, "PhysAddr(0x{:x}) is too high", self.0);
+        // this is not actually correct, va should be less than npages * 4096.
+        assert!(self.0 < 0x10000000, "PhysAddr(0x{:x}) is too high", self.0);
         VirtAddr(self.0 | KERN_BASE)
     }
 
