@@ -29,7 +29,6 @@ pub(crate) const KHEAP_SIZE: usize = 3 * PTSIZE;
 
 // The top address of user can access.
 pub(crate) const UTOP: u32 = KHEAP_BASE;
-pub(crate) const UXSTACKTOP: u32 = UTOP;
 pub(crate) const USTACKTOP: u32 = UTOP - (2 * PGSIZE as u32);
 pub(crate) const USTACKSIZE: u32 = PGSIZE;
 
