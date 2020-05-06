@@ -23,12 +23,11 @@ pub(crate) const KSTKSIZE: u32 = (8 * PGSIZE);
 pub(crate) const KSTKGAP: u32 = (8 * PGSIZE);
 pub(crate) const MMIOLIM: u32 = KSTACKTOP - (PTSIZE as u32);
 pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
-pub(crate) const ULIM: u32 = MMIOBASE;
 // Assign kernel heap area instead of Cur. Page Table, RO PAGES, and RO ENVS in JOS
-// TODO: should be above ULIM?
-pub(crate) const KHEAP_BASE: u32 = ULIM - KHEAP_SIZE as u32;
+pub(crate) const KHEAP_BASE: u32 = MMIOBASE - KHEAP_SIZE as u32;
 pub(crate) const KHEAP_SIZE: usize = 3 * PTSIZE;
 
+// The top address of user can access.
 pub(crate) const UTOP: u32 = KHEAP_BASE;
 pub(crate) const UXSTACKTOP: u32 = UTOP;
 pub(crate) const USTACKTOP: u32 = UTOP - (2 * PGSIZE as u32);

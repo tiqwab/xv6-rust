@@ -498,7 +498,7 @@ impl PageDirectory {
     /// 'len/PGSIZE + 1', or 'len/PGSIZE + 2' pages.
     ///
     /// A user program can access a virtual address if (1) the address is below
-    /// ULIM, and (2) the page table gives it permission.  These are exactly
+    /// UTOP, and (2) the page table gives it permission.  These are exactly
     /// the tests you should implement here.
     ///
     /// If there is an error, Return Err(addr), which is the first erroneous virtual address.
@@ -515,7 +515,7 @@ impl PageDirectory {
 
         let mut va = start_va;
         while va < end_va {
-            if va > VirtAddr(ULIM) {
+            if va > VirtAddr(UTOP) {
                 return Err(va);
             }
             let pte_opt = self.walk(va, false, &mut *allocator);
