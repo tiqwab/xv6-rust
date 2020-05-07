@@ -4,7 +4,7 @@ use crate::once::Once;
 // Disk layout:
 // [ boot block | super block | log | inode blocks | free bit map | data blocks ]
 //
-// mkfs computes the super block and builds an initial file system.
+// fs/fsformat computes the super block and builds an initial file system.
 // The super block describes the disk layout.
 #[repr(C)]
 pub(crate) struct SuperBlock {
