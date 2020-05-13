@@ -38,7 +38,7 @@ pub(crate) fn sched_halt(table: MutexGuard<EnvTable>) -> ! {
 
     let cpu = mpconfig::this_cpu();
     unsafe {
-        asm!(
+        llvm_asm!(
         "movl $0, %ebp; \
         movl $0, %esp; \
         pushl $0;

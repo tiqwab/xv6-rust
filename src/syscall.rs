@@ -5,7 +5,7 @@ use crate::env::EnvId;
 use crate::file::FileDescriptor;
 use crate::fs::Stat;
 use crate::pmap::VirtAddr;
-use crate::{env, pmap, sysfile};
+use crate::{env, sysfile};
 use crate::{sched, util};
 use alloc::vec::Vec;
 use consts::*;

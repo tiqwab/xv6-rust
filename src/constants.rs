@@ -19,8 +19,8 @@ pub(crate) const NPTENTRIES: usize = 1024;
 pub(crate) const PTSIZE: usize = NPTENTRIES * (PGSIZE as usize);
 
 pub(crate) const KSTACKTOP: u32 = KERN_BASE;
-pub(crate) const KSTKSIZE: u32 = (8 * PGSIZE);
-pub(crate) const KSTKGAP: u32 = (8 * PGSIZE);
+pub(crate) const KSTKSIZE: u32 = 8 * PGSIZE;
+pub(crate) const KSTKGAP: u32 = 8 * PGSIZE;
 pub(crate) const MMIOLIM: u32 = KSTACKTOP - (PTSIZE as u32);
 pub(crate) const MMIOBASE: u32 = MMIOLIM - (PTSIZE as u32);
 // Assign kernel heap area instead of Cur. Page Table, RO PAGES, and RO ENVS in JOS
@@ -85,8 +85,8 @@ pub(crate) const NDIRECT: usize = 12;
 pub(crate) const NINDIRECT: usize = BLK_SIZE / 4;
 pub(crate) const MAX_FILE: usize = NDIRECT + NINDIRECT;
 pub(crate) const NINODE: usize = 50; // maximum number of active i-nodes
-pub(crate) const IPB: usize = (BLK_SIZE / mem::size_of::<DInode>()); // how many inodes a block has
-pub(crate) const BPB: usize = (BLK_SIZE * 8); // how many bit a block contains
+pub(crate) const IPB: usize = BLK_SIZE / mem::size_of::<DInode>(); // how many inodes a block has
+pub(crate) const BPB: usize = BLK_SIZE * 8; // how many bit a block contains
 pub(crate) const DIR_SIZ: usize = 12; // maximum length of file name.
 pub(crate) const ROOT_DEV: u32 = 1; // device number of file system root disk
 pub(crate) const ROOT_INUM: u32 = 1; // inode of root

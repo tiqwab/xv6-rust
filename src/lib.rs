@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(const_fn)]
-#![feature(asm)]
 #![feature(bool_to_option)]
 #![feature(ptr_offset_from)]
 #![feature(alloc_error_handler)]
@@ -8,11 +7,11 @@
 #![feature(const_raw_ptr_deref)]
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(thread_local)]
-#![feature(slice_from_raw_parts)]
 #![feature(core_intrinsics)]
 #![feature(option_result_contains)]
 #![feature(try_trait)]
 #![feature(fn_traits)]
+#![feature(llvm_asm)]
 #![allow(dead_code)]
 
 // This must come first to resolve macro?

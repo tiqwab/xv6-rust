@@ -20,7 +20,7 @@ pub(crate) mod consts {
     pub(crate) const MP_LINTR: u8 = 0x04; // One per system interrupt source
 
     // Bit flags of MpProc.flag
-    pub(crate) const MPPROC_FLAGS_BP: u8 = (1 << 1);
+    pub(crate) const MPPROC_FLAGS_BP: u8 = 1 << 1;
 
     // Maximum Number of CPUs
     pub(crate) const MAX_NUM_CPU: usize = 8;

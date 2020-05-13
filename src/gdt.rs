@@ -244,21 +244,21 @@ pub(crate) unsafe fn init_percpu() {
 
     // The kernel never uses GS or FS, so we leave those set to
     // the user data segment.
-    asm! ("movw $0, %gs" : : "r" ((GDT_USER_DATA | 3) as u16) : "memory" : "volatile");
-    asm! ("movw $0, %fs" : : "r" ((GDT_USER_DATA | 3) as u16) : "memory" : "volatile");
+    llvm_asm! ("movw $0, %gs" : : "r" ((GDT_USER_DATA | 3) as u16) : "memory" : "volatile");
+    llvm_asm! ("movw $0, %fs" : : "r" ((GDT_USER_DATA | 3) as u16) : "memory" : "volatile");
 
     // The kernel does use ES, DS, and SS.  We'll change between
     // the kernel and user data segments as needed.
-    asm! ("movw $0, %es" : : "r" (GDT_KERNEL_DATA as u16) : "memory" : "volatile");
-    asm! ("movw $0, %ds" : : "r" (GDT_KERNEL_DATA as u16) : "memory" : "volatile");
-    asm! ("movw $0, %ss" : : "r" (GDT_KERNEL_DATA as u16) : "memory" : "volatile");
+    llvm_asm! ("movw $0, %es" : : "r" (GDT_KERNEL_DATA as u16) : "memory" : "volatile");
+    llvm_asm! ("movw $0, %ds" : : "r" (GDT_KERNEL_DATA as u16) : "memory" : "volatile");
+    llvm_asm! ("movw $0, %ss" : : "r" (GDT_KERNEL_DATA as u16) : "memory" : "volatile");
 
     // Load the kernel text segment into CS.
     // The second operand specifies a label defined in the next line.
     // The reason why a suffix 'f' is necessary is:
     // https://stackoverflow.com/questions/3898435/labels-in-gcc-inline-assembly
-    // asm! ("ljmp $0, 1f; 1:" : : "i" (GDT_KERNEL_CODE) : : "volatile");
-    asm!("push $0; \
+    // llvm_asm! ("ljmp $0, 1f; 1:" : : "i" (GDT_KERNEL_CODE) : : "volatile");
+    llvm_asm!("push $0; \
               lea  1f, %eax; \
               push %eax; \
               lret; \

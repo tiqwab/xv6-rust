@@ -3,7 +3,7 @@ use core::ptr::null;
 
 use crate::constants::*;
 use crate::elf::{Elf, ElfParser, Proghdr, ProghdrType};
-use crate::pmap::{PageDirectory, PhysAddr, VirtAddr, PDX};
+use crate::pmap::{PageDirectory, PhysAddr, VirtAddr};
 use crate::spinlock::{Mutex, MutexGuard};
 use crate::trap::Trapframe;
 use crate::{file, fs, log, mpconfig, pmap, sched, util, x86};
@@ -503,7 +503,7 @@ pub(crate) fn env_create_for_init(env_table: &mut EnvTable) -> EnvId {
 /// This function does not return.
 fn env_pop_tf(tf: *const Trapframe) -> ! {
     unsafe {
-        asm!(
+        llvm_asm!(
         "movl $0, %esp; \
         popal; \
         popl %es; \
