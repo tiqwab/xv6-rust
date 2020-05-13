@@ -14,7 +14,7 @@ pub(crate) fn inb(port: u16) -> u8 {
 pub(crate) fn insl(port: u16, addr: *mut u32, cnt: usize) {
     unsafe {
         llvm_asm!("cld; rep insl" : :
-        "N{dx}" (port), "{esi}" (addr), "{ecx}" (cnt) :
+        "N{dx}" (port), "{edi}" (addr), "{ecx}" (cnt) :
         "memory", "cc" :
         "volatile");
     }
